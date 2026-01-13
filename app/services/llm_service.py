@@ -1,19 +1,20 @@
 import json
-from http import HTTPStatus
-import dashscope
+from openai import OpenAI
 from app.core.config import settings
 from app.llm.schemas import SQLQueryPlan
 from app.llm.prompts import SYSTEM_PROMPT_TEMPLATE
 from datetime import datetime
 
-# Use Qwen-2.5-Coder-32B for best SQL performance
-MODEL_NAME = "qwen2.5-coder-32b-instruct"
-
 class LLMService:
     def __init__(self):
-        dashscope.api_key = settings.DASHSCOPE_API_KEY
+        # This setup replicates your: -H "Authorization: Bearer YOUR_KEY"
+        self.client = OpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.AI_BASE_URL
+        )
 
     def generate_sql(self, user_question: str, ddl_context: str) -> SQLQueryPlan:
+        # Build the prompt
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
             ddl_context=ddl_context,
             current_date=datetime.now().strftime("%Y-%m-%d"),
@@ -21,42 +22,34 @@ class LLMService:
         )
 
         try:
-            # Call Qwen API
-            response = dashscope.Generation.call(
-                model=MODEL_NAME,
-                messages=[{'role': 'system', 'content': 'You are a SQL generator. Output JSON only.'},
-                          {'role': 'user', 'content': prompt}],
-                result_format='message',  # Returns full message object
+            print(f"DEBUG: Connecting to {settings.AI_BASE_URL} with model {settings.AI_MODEL_NAME}...")
+
+            # This call replicates your Curl structure exactly
+            response = self.client.chat.completions.create(
+                model=settings.AI_MODEL_NAME, # "qwen3-coder-plus"
+                messages=[
+                    {'role': 'system', 'content': 'You are a SQL generator. Output JSON only. No markdown.'},
+                    {'role': 'user', 'content': prompt}
+                ],
+                temperature=0.2, # Matching your curl temperature
             )
 
-            if response.status_code == HTTPStatus.OK:
-                content = response.output.choices[0].message.content
-                
-                # FIX: aggressive cleanup
-                content = content.replace("```json", "").replace("```", "").strip()
-                
-                # Debug print to see what the AI is actually sending (Check your console!)
-                print(f"DEBUG LLM OUTPUT: {content}")
-                
-                try:
-                    data = json.loads(content)
-                    return SQLQueryPlan(**data)
-                except json.JSONDecodeError:
-                    # If JSON fails, try to repair or fail gracefully
-                    print("JSON PARSE ERROR")
-                    return SQLQueryPlan(
-                        thought_process="Failed to parse AI response.", 
-                        sql_query="", 
-                        visualization_type="table", 
-                        is_safe=False
-                    )
-            else:
-                raise Exception(f"Qwen API Error: {response.message}")
-        
+            # Get content
+            content = response.choices[0].message.content
+            
+            # Clean up (Just in case the model adds ```json)
+            content = content.replace("```json", "").replace("```", "").strip()
+            
+            print(f"DEBUG: AI Response:\n{content}")
+
+            # Parse JSON
+            data = json.loads(content)
+            return SQLQueryPlan(**data)
+
         except Exception as e:
-            # Fail safe: Return a safe error plan
+            print(f"❌ AI ERROR: {str(e)}")
             return SQLQueryPlan(
-                thought_process=f"Error generating query: {str(e)}",
+                thought_process=f"Error: {str(e)}",
                 sql_query="",
                 visualization_type="table",
                 is_safe=False

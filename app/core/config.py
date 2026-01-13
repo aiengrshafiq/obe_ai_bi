@@ -26,5 +26,13 @@ class Settings:
     SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecretkey")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY") # Qwen Key
+    # print(f"DEBUG: Loaded Key: '{DASHSCOPE_API_KEY}'")
+
+
+    # 1. Exact Endpoint from your Curl
+    AI_BASE_URL: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    
+    # 2. Exact Model Name from your Curl
+    AI_MODEL_NAME: str = "qwen3-coder-plus"
 
 settings = Settings()
