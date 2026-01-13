@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Literal, Union
 
+
 # 1. Define the filters strictly to prevent SQL Injection
 class FilterCondition(BaseModel):
     column: str = Field(..., description="The database column name, e.g., 'trading_volume'")
@@ -28,4 +29,26 @@ class DataQueryPlan(BaseModel):
     # Visualization Recommendation
     suggested_chart: Literal['table', 'line', 'bar', 'pie', 'kpi_card'] = Field(
         'table', description="Best way to visualize this data"
+    )
+
+class SQLQueryPlan(BaseModel):
+    """
+    The strict structure we force the AI to return.
+    This prevents it from writing 'paragraphs' of text when we need code.
+    """
+    thought_process: str = Field(
+        ..., 
+        description="Explain briefly why you chose this SQL. e.g. 'Querying daily volume table filtering by BTC-USDT'"
+    )
+    sql_query: str = Field(
+        ..., 
+        description="The valid PostgreSQL query. Must start with SELECT."
+    )
+    visualization_type: Literal['table', 'line_chart', 'bar_chart', 'number_card'] = Field(
+        ..., 
+        description="The best way to show this result to the user."
+    )
+    is_safe: bool = Field(
+        True,
+        description="Set to False if the user asks for something outside the provided schema."
     )

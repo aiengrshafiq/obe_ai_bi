@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OneBullex AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+
+    <header class="bg-blue-900 text-white p-4 shadow-md">
+        <h1 class="text-xl font-bold">OneBullex Data Copilot</h1>
+    </header>
+
+    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4">
+        </div>
+
+    <div class="p-4 bg-white border-t">
+        <div class="flex space-x-2">
+            <input type="text" id="user-input" class="flex-1 border p-2 rounded" placeholder="Ask about Volume, Deposits, or Users...">
+            <button onclick="sendMessage()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Send</button>
+        </div>
+    </div>
+
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const box = document.getElementById('chat-box');
+            const text = input.value;
+            if (!text) return;
+
+            // Add User Message
+            box.innerHTML += `<div class="flex justify-end"><div class="bg-blue-100 p-3 rounded-lg max-w-xl">${text}</div></div>`;
+            input.value = '';
+
+            // Loading Indicator
+            const loadingId = 'loading-' + Date.now();
+            box.innerHTML += `<div id="${loadingId}" class="text-gray-500 text-sm ml-2">Thinking...</div>`;
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: text})
+                });
+                const data = await res.json();
+                
+                document.getElementById(loadingId).remove();
+
+                if (data.type === 'error') {
+                    box.innerHTML += `<div class="bg-red-100 p-3 rounded-lg text-red-700 max-w-xl">${data.message}</div>`;
+                } else {
+                    // Show Thought & SQL
+                    let content = `<div class="bg-white p-4 rounded-lg shadow max-w-2xl border-l-4 border-blue-500">
+                        <div class="text-xs text-gray-500 mb-1">🧠 ${data.thought}</div>
+                        <div class="bg-gray-800 text-green-400 text-xs p-2 rounded mb-3 font-mono overflow-x-auto">${data.sql}</div>`;
+                    
+                    // Show Data Table
+                    if (data.data && data.data.length > 0) {
+                        content += `<div class="overflow-x-auto"><table class="min-w-full text-sm border"><thead><tr class="bg-gray-50">`;
+                        // Headers
+                        Object.keys(data.data[0]).forEach(k => content += `<th class="p-2 border">${k}</th>`);
+                        content += `</tr></thead><tbody>`;
+                        // Rows (Limit to 5 for UI)
+                        data.data.slice(0, 5).forEach(row => {
+                            content += `<tr>`;
+                            Object.values(row).forEach(v => content += `<td class="p-2 border">${v}</td>`);
+                            content += `</tr>`;
+                        });
+                        content += `</tbody></table></div>`;
+                        if(data.data.length > 5) content += `<div class="text-xs text-gray-400 mt-1">Showing 5 of ${data.data.length} rows</div>`;
+                    } else {
+                        content += `<div class="text-gray-500 italic">No data found.</div>`;
+                    }
+                    content += `</div>`;
+                    box.innerHTML += content;
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    </script>
+</body>
+</html>
