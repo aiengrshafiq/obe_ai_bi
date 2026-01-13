@@ -1,40 +1,163 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>OneBullex AI</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneBullex Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+    </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="bg-gray-50 h-screen flex overflow-hidden">
 
-    <header class="bg-blue-900 text-white p-4 shadow-md">
-        <h1 class="text-xl font-bold">OneBullex Data Copilot</h1>
-    </header>
+    <aside class="w-64 bg-slate-900 text-white hidden md:flex flex-col flex-shrink-0 transition-all duration-300">
+        <div class="p-6 border-b border-slate-800">
+            <h1 class="text-xl font-bold tracking-tight text-blue-400">OneBullEx</h1>
+            <p class="text-xs text-slate-400 mt-1">Enterprise Data Copilot</p>
+        </div>
+        
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar">
+            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-slate-800 hover:bg-slate-700 text-white p-3 rounded-lg transition-colors duration-200 border border-slate-700">
+                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                <span class="font-medium text-sm">New Chat</span>
+            </button>
+            
+            <div class="pt-6 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Suggested Queries</div>
+            
+            <button onclick="fillInput('Show top 10 large deposits')" class="text-left w-full group flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 transition">
+                <span class="bg-slate-800 text-slate-400 group-hover:text-blue-400 group-hover:bg-slate-700 w-6 h-6 flex items-center justify-center rounded text-xs transition">💰</span>
+                <span class="text-slate-300 text-sm group-hover:text-white">Top Deposits</span>
+            </button>
+            
+            <button onclick="fillInput('Count trades by market type')" class="text-left w-full group flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 transition">
+                <span class="bg-slate-800 text-slate-400 group-hover:text-green-400 group-hover:bg-slate-700 w-6 h-6 flex items-center justify-center rounded text-xs transition">📊</span>
+                <span class="text-slate-300 text-sm group-hover:text-white">Trade Counts</span>
+            </button>
+            
+            <button onclick="fillInput('Show recent withdrawals')" class="text-left w-full group flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 transition">
+                <span class="bg-slate-800 text-slate-400 group-hover:text-red-400 group-hover:bg-slate-700 w-6 h-6 flex items-center justify-center rounded text-xs transition">🚨</span>
+                <span class="text-slate-300 text-sm group-hover:text-white">Withdrawals</span>
+            </button>
+        </nav>
+        
+        <div class="p-4 border-t border-slate-800 bg-slate-900">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-xs font-bold shadow-lg">DE</div>
+                <div>
+                    <p class="text-sm font-medium text-white">Data Engineer</p>
+                    <p class="text-xs text-green-400 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> Online
+                    </p>
+                </div>
+            </div>
+        </div>
+    </aside>
 
-    <div id="chat-box" class="flex-1 overflow-y-auto p-4 space-y-4">
+    <main class="flex-1 flex flex-col relative bg-white h-full w-full">
+        <header class="h-16 flex-shrink-0 border-b border-gray-100 flex items-center justify-between px-6 bg-white z-10">
+            <div class="flex items-center gap-2">
+                <h2 class="text-lg font-semibold text-gray-800">OneBullEx Assistant</h2>
+                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">BETA</span>
+            </div>
+            <div class="text-xs text-gray-400 font-mono">Model: Qwen-2.5-Coder-32B</div>
+        </header>
+
+        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32 scroll-smooth">
+            <div class="flex space-x-4 max-w-3xl mx-auto">
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
+                <div class="bg-white border border-gray-100 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
+                    <h3 class="font-medium text-gray-900 mb-2">Hello! I'm connected to the Data Warehouse.</h3>
+                    <p class="text-sm text-gray-600 mb-3">I can query the following tables directly:</p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Finance</div>
+                            <div class="text-sm font-medium text-gray-800">Deposits & Withdrawals</div>
+                        </div>
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Trading</div>
+                            <div class="text-sm font-medium text-gray-800">Spot & Futures Trades</div>
+                        </div>
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Users</div>
+                            <div class="text-sm font-medium text-gray-800">Positions & Points</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-    <div class="p-4 bg-white border-t">
-        <div class="flex space-x-2">
-            <input type="text" id="user-input" class="flex-1 border p-2 rounded" placeholder="Ask about Volume, Deposits, or Users...">
-            <button onclick="sendMessage()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">Send</button>
+        <div class="absolute bottom-0 left-0 w-full bg-white/90 backdrop-blur-sm border-t border-gray-100 p-4 pb-6">
+            <div class="max-w-3xl mx-auto relative">
+                <div class="relative shadow-lg rounded-2xl">
+                    <input type="text" id="user-input" 
+                        class="w-full bg-white border border-gray-200 text-gray-800 placeholder-gray-400 text-sm rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 block p-4 pr-14 transition-all" 
+                        placeholder="Ask a question about your data..."
+                        onkeypress="handleKeyPress(event)">
+                    
+                    <button onclick="sendMessage()" class="absolute right-2 top-2 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors duration-200 group">
+                        <svg class="w-5 h-5 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+                <p class="text-center text-[10px] text-gray-400 mt-3">AI generated responses. Verify important financial figures.</p>
+            </div>
         </div>
-    </div>
+    </main>
 
     <script>
+        function fillInput(text) {
+            const input = document.getElementById('user-input');
+            input.value = text;
+            input.focus();
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') sendMessage();
+        }
+
         async function sendMessage() {
             const input = document.getElementById('user-input');
-            const box = document.getElementById('chat-box');
-            const text = input.value;
+            const container = document.getElementById('chat-container');
+            const text = input.value.trim();
             if (!text) return;
 
-            // Add User Message
-            box.innerHTML += `<div class="flex justify-end"><div class="bg-blue-100 p-3 rounded-lg max-w-xl">${text}</div></div>`;
+            // 1. Add User Message
+            container.innerHTML += `
+                <div class="flex justify-end space-x-4 max-w-3xl mx-auto">
+                    <div class="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-md max-w-xl text-sm leading-relaxed">
+                        ${text}
+                    </div>
+                </div>`;
+            
             input.value = '';
+            scrollToBottom();
 
-            // Loading Indicator
+            // 2. Add Loading State
             const loadingId = 'loading-' + Date.now();
-            box.innerHTML += `<div id="${loadingId}" class="text-gray-500 text-sm ml-2">Thinking...</div>`;
+            container.innerHTML += `
+                <div id="${loadingId}" class="flex space-x-4 max-w-3xl mx-auto">
+                    <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
+                    <div class="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
+                        <div class="flex space-x-1">
+                            <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                            <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                            <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                        </div>
+                        <span class="text-xs text-gray-400 font-medium">Generating SQL...</span>
+                    </div>
+                </div>`;
+            scrollToBottom();
 
             try {
                 const res = await fetch('/api/chat', {
@@ -44,39 +167,110 @@
                 });
                 const data = await res.json();
                 
-                document.getElementById(loadingId).remove();
+                const loader = document.getElementById(loadingId);
+                if(loader) loader.remove();
 
+                // 3. Render Response
+                let contentHTML = '';
+                
                 if (data.type === 'error') {
-                    box.innerHTML += `<div class="bg-red-100 p-3 rounded-lg text-red-700 max-w-xl">${data.message}</div>`;
+                    contentHTML = `
+                        <div class="flex items-start gap-3 text-red-600">
+                            <svg class="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                            <div>
+                                <div class="font-medium text-sm">Cannot process request</div>
+                                <div class="text-xs text-red-400 mt-1">${data.message}</div>
+                                ${data.thought ? `<div class="mt-2 p-2 bg-red-50 rounded text-xs text-red-500 font-mono">${data.thought}</div>` : ''}
+                            </div>
+                        </div>`;
                 } else {
-                    // Show Thought & SQL
-                    let content = `<div class="bg-white p-4 rounded-lg shadow max-w-2xl border-l-4 border-blue-500">
-                        <div class="text-xs text-gray-500 mb-1">🧠 ${data.thought}</div>
-                        <div class="bg-gray-800 text-green-400 text-xs p-2 rounded mb-3 font-mono overflow-x-auto">${data.sql}</div>`;
+                    // Logic Thought Header
+                    contentHTML += `
+                        <div class="mb-4">
+                            <div class="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-medium border border-blue-100">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                                Thought Process
+                            </div>
+                            <p class="mt-2 text-sm text-gray-600 ml-1">${data.thought}</p>
+                        </div>`;
                     
-                    // Show Data Table
+                    // SQL Block
+                    contentHTML += `
+                        <div class="mb-5 group relative">
+                            <div class="absolute -top-2.5 left-3 px-2 bg-white text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Generated SQL</div>
+                            <div class="bg-slate-900 rounded-lg p-4 overflow-x-auto border border-slate-800 shadow-inner">
+                                <code class="text-green-400 text-xs font-mono whitespace-pre leading-relaxed">${data.sql}</code>
+                            </div>
+                        </div>`;
+
+                    // Data Table
                     if (data.data && data.data.length > 0) {
-                        content += `<div class="overflow-x-auto"><table class="min-w-full text-sm border"><thead><tr class="bg-gray-50">`;
-                        // Headers
-                        Object.keys(data.data[0]).forEach(k => content += `<th class="p-2 border">${k}</th>`);
-                        content += `</tr></thead><tbody>`;
-                        // Rows (Limit to 5 for UI)
-                        data.data.slice(0, 5).forEach(row => {
-                            content += `<tr>`;
-                            Object.values(row).forEach(v => content += `<td class="p-2 border">${v}</td>`);
-                            content += `</tr>`;
+                        contentHTML += `
+                            <div class="overflow-hidden border border-gray-200 rounded-xl shadow-sm bg-white">
+                                <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                                    <span class="text-xs font-semibold text-gray-500 uppercase">Result Data</span>
+                                    <span class="text-[10px] text-gray-400 bg-white px-2 py-0.5 rounded border">${data.data.length} rows</span>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full divide-y divide-gray-100">
+                                        <thead class="bg-white"><tr>`;
+                        
+                        // Table Headers
+                        Object.keys(data.data[0]).forEach(k => {
+                            contentHTML += `<th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap bg-gray-50/50">${k}</th>`;
                         });
-                        content += `</tbody></table></div>`;
-                        if(data.data.length > 5) content += `<div class="text-xs text-gray-400 mt-1">Showing 5 of ${data.data.length} rows</div>`;
+                        contentHTML += `</tr></thead><tbody class="divide-y divide-gray-50 bg-white">`;
+
+                        // Table Rows (Max 10 for display)
+                        const displayRows = data.data.slice(0, 10);
+                        displayRows.forEach(row => {
+                            contentHTML += `<tr class="hover:bg-blue-50/50 transition-colors">`;
+                            Object.values(row).forEach(v => {
+                                // Simple formatter for numbers
+                                let val = v;
+                                if (typeof v === 'number' && v % 1 !== 0) val = v.toFixed(4); 
+                                contentHTML += `<td class="px-4 py-2.5 whitespace-nowrap text-sm text-gray-600 font-mono">${val}</td>`;
+                            });
+                            contentHTML += `</tr>`;
+                        });
+                        contentHTML += `</tbody></table></div>`;
+                        
+                        if (data.data.length > 10) {
+                            contentHTML += `<div class="bg-gray-50 px-4 py-2 text-center border-t border-gray-100">
+                                <span class="text-xs text-gray-500 italic">Showing first 10 rows of ${data.data.length}</span>
+                            </div>`;
+                        }
+                        contentHTML += `</div>`;
                     } else {
-                        content += `<div class="text-gray-500 italic">No data found.</div>`;
+                        contentHTML += `
+                            <div class="bg-yellow-50 border border-yellow-100 rounded-lg p-4 flex items-center gap-3 text-yellow-700">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                <span class="text-sm">Query executed successfully but returned 0 results.</span>
+                            </div>`;
                     }
-                    content += `</div>`;
-                    box.innerHTML += content;
                 }
+
+                container.innerHTML += `
+                    <div class="flex space-x-4 max-w-3xl mx-auto animate-fade-in-up">
+                        <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm mt-1">AI</div>
+                        <div class="bg-white border border-gray-100 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
+                            ${contentHTML}
+                        </div>
+                    </div>`;
+                scrollToBottom();
+
             } catch (e) {
                 console.error(e);
+                const loader = document.getElementById(loadingId);
+                if(loader) loader.remove();
+                
+                container.innerHTML += `<div class="text-center text-red-500 text-sm py-4">Network Error: Could not connect to backend.</div>`;
             }
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-container');
+            container.scrollTop = container.scrollHeight;
         }
     </script>
 </body>

@@ -32,12 +32,24 @@ class LLMService:
             if response.status_code == HTTPStatus.OK:
                 content = response.output.choices[0].message.content
                 
-                # Clean up response (sometimes LLMs add ```json ... ``` wrappers)
+                # FIX: aggressive cleanup
                 content = content.replace("```json", "").replace("```", "").strip()
                 
-                # Parse JSON into our strict Pydantic model
-                data = json.loads(content)
-                return SQLQueryPlan(**data)
+                # Debug print to see what the AI is actually sending (Check your console!)
+                print(f"DEBUG LLM OUTPUT: {content}")
+                
+                try:
+                    data = json.loads(content)
+                    return SQLQueryPlan(**data)
+                except json.JSONDecodeError:
+                    # If JSON fails, try to repair or fail gracefully
+                    print("JSON PARSE ERROR")
+                    return SQLQueryPlan(
+                        thought_process="Failed to parse AI response.", 
+                        sql_query="", 
+                        visualization_type="table", 
+                        is_safe=False
+                    )
             else:
                 raise Exception(f"Qwen API Error: {response.message}")
         
