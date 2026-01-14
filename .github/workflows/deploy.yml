@@ -1,0 +1,69 @@
+name: Deploy OneBullex AI Copilot to SAE
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  # The Public URL for GitHub to push to
+  IMAGE_URL: ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ secrets.ALIYUN_IMAGE_NAME }}:${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 1. Login to Alibaba Cloud ACR
+    - name: Login to Alibaba Cloud ACR
+      uses: aliyun/acr-login@v1
+      with:
+        login-server: ${{ secrets.ALIYUN_REGISTRY }}
+        region-id: ${{ secrets.ALIYUN_REGION_ID }}
+        access-key-id: ${{ secrets.ALIYUN_ACCESS_KEY }}
+        access-key-secret: ${{ secrets.ALIYUN_ACCESS_SECRET }}
+        instance-id: "cri-7lw9a26kgowh6dao" # Keeping your existing Instance ID
+
+    # 2. Build and Push Docker Image
+    - name: Build and Push Image
+      run: |
+        docker build -t ${{ env.IMAGE_URL }} .
+        docker push ${{ env.IMAGE_URL }}
+
+    # 3. Install Alibaba Cloud CLI
+    - name: Install Aliyun CLI
+      run: |
+        curl -o aliyun-cli-linux-3.0.124-amd64.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.124-amd64.tgz
+        tar -xvzf aliyun-cli-linux-3.0.124-amd64.tgz
+        sudo mv aliyun /usr/local/bin/
+
+    # 4. Configure Credentials
+    - name: Configure Aliyun CLI
+      run: |
+        aliyun configure set \
+          --profile default \
+          --mode AK \
+          --region ${{ secrets.ALIYUN_REGION_ID }} \
+          --access-key-id ${{ secrets.ALIYUN_ACCESS_KEY }} \
+          --access-key-secret ${{ secrets.ALIYUN_ACCESS_SECRET }}
+
+    # 5. GENERATE VPC URL
+    # Using your existing logic to inject '-vpc' into the registry domain
+    - name: Generate SAE VPC URL
+      id: vpc_config
+      run: |
+        VPC_IMAGE_URL=$(echo ${{ env.IMAGE_URL }} | sed 's/onebullex-acr-registry/onebullex-acr-registry-vpc/')
+        echo "SAE_IMAGE_URL=$VPC_IMAGE_URL" >> $GITHUB_ENV
+        echo "Using VPC URL for Deployment: $VPC_IMAGE_URL"
+
+    # 6. Deploy to SAE
+    - name: Deploy to SAE
+      run: |
+        aliyun sae DeployApplication \
+          --endpoint sae.ap-northeast-1.aliyuncs.com \
+          --AppId ${{ secrets.ALIYUN_SAE_APP_ID }} \
+          --ImageUrl ${{ env.SAE_IMAGE_URL }} \
+          --AcrInstanceId "cri-7lw9a26kgowh6dao" \
+          --MinReadyInstances 1
