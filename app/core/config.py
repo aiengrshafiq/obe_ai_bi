@@ -36,4 +36,5 @@ class Settings:
 
     APP_ACCESS_CODE: str = os.getenv("APP_ACCESS_CODE", "admin")
 
+
 settings = Settings()
