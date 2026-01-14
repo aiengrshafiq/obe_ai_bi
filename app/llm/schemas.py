@@ -44,10 +44,18 @@ class SQLQueryPlan(BaseModel):
         ..., 
         description="The valid PostgreSQL query. Must start with SELECT."
     )
-    visualization_type: Literal['table', 'line_chart', 'bar_chart', 'number_card'] = Field(
-        ..., 
-        description="The best way to show this result to the user."
-    )
+    # visualization_type: Literal['table', 'line_chart', 'bar_chart', 'number_card'] = Field(
+    #     ..., 
+    #     description="The best way to show this result to the user."
+    # )
+
+    # NEW: Chart Configuration
+    visualization_type: Literal['table', 'bar', 'line', 'pie', 'kpi'] = Field(..., description="Chart type")
+    chart_x_axis: Optional[str] = Field(None, description="Column name for X-axis (e.g., date, category)")
+    chart_y_axis: Optional[str] = Field(None, description="Column name for Y-axis (e.g., amount, count)")
+    chart_title: str = Field(..., description="A professional title for the chart")
+
+
     is_safe: bool = Field(
         True,
         description="Set to False if the user asks for something outside the provided schema."

@@ -35,4 +35,6 @@ class Settings:
     # 2. Exact Model Name from your Curl
     AI_MODEL_NAME: str = "qwen3-coder-plus"
 
+    APP_ACCESS_CODE: str = os.getenv("APP_ACCESS_CODE", "admin")
+
 settings = Settings()
