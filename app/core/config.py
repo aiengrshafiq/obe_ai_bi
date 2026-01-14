@@ -28,7 +28,6 @@ class Settings:
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY") # Qwen Key
     # print(f"DEBUG: Loaded Key: '{DASHSCOPE_API_KEY}'")
 
-
     # 1. Exact Endpoint from your Curl
     AI_BASE_URL: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
     
