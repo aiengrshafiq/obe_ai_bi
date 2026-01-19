@@ -37,6 +37,7 @@ async def chat_endpoint(payload: ChatRequest):
     
     # 1. Get Context
     ddl = get_ddl_context()
+
     # --- DEBUG PRINT ---
     print(f"DEBUG: Current DDL Size: {len(ddl)} chars")
     if "dws_user_deposit_withdraw_detail_di" in ddl:
@@ -44,6 +45,7 @@ async def chat_endpoint(payload: ChatRequest):
     else:
         print("SUCCESS: New DDL is loaded.")
     # -------------------
+    
     # 2. Call AI (Pydantic Schema ensures structure)
     plan = llm_service.generate_sql(user_msg, ddl, history)
     
