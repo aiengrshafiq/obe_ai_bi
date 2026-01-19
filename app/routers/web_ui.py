@@ -69,7 +69,7 @@ async def chat_endpoint(payload: ChatRequest):
         # 4. Generate Insight (NEW STEP)
         # Only generate if we have data and it's not a huge raw dump
         if data and len(data) > 0:
-            insight = llm_service.generate_insight(user_msg, data)
+            insight = await llm_service.generate_insight(user_msg, data)
 
     return {
         "type": "success",

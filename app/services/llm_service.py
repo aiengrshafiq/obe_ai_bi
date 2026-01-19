@@ -98,7 +98,7 @@ class LLMService:
                 is_safe=False
             )
 
-    def generate_insight(self, user_question: str, data: list) -> str:
+    async def generate_insight(self, user_question: str, data: list) -> str:
         """
         Takes the actual data results and generates a 1-sentence business insight.
         """
