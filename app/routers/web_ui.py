@@ -5,7 +5,7 @@ from app.services.llm_service import LLMService
 from app.db.metadata_store import get_ddl_context
 from app.db.raw_executor import execute_raw_sql
 from typing import List, Optional, Dict
-from app.db.raw_executor import execute_raw_sql
+
 
 
 router = APIRouter()

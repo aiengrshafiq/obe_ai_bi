@@ -1,5 +1,5 @@
 import json
-from openai import OpenAI
+from openai import AsyncOpenAI
 from app.core.config import settings
 from app.llm.schemas import SQLQueryPlan
 from app.llm.prompts import SYSTEM_PROMPT_TEMPLATE
@@ -9,7 +9,7 @@ from app.llm.metadata import get_metadata_context
 class LLMService:
     def __init__(self):
         # This setup replicates your: -H "Authorization: Bearer YOUR_KEY"
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=settings.DASHSCOPE_API_KEY,
             base_url=settings.AI_BASE_URL
         )
@@ -36,6 +36,8 @@ class LLMService:
 
     async def generate_sql(self, user_question: str, ddl_context: str, history: list = []) -> SQLQueryPlan:
         
+        print(f"DEBUG: Connecting to {settings.AI_BASE_URL}...")
+
         # 1. Get REAL Partition (Intelligence Upgrade)
         latest_ds = await self.get_latest_partition("public.user_profile_360")
 
@@ -66,7 +68,7 @@ class LLMService:
             print(f"DEBUG: Connecting to {settings.AI_BASE_URL} with model {settings.AI_MODEL_NAME}...")
 
             # This call replicates your Curl structure exactly
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=settings.AI_MODEL_NAME, # "qwen3-coder-plus"
                 messages=[
                     {'role': 'system', 'content': 'You are a SQL generator. Output JSON only. No markdown.'},
@@ -119,7 +121,7 @@ class LLMService:
         """
 
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=settings.AI_MODEL_NAME, 
                 messages=[{'role': 'user', 'content': prompt}],
                 temperature=0.5, # Slightly creative
