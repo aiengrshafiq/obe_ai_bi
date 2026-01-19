@@ -3,7 +3,8 @@ from openai import OpenAI
 from app.core.config import settings
 from app.llm.schemas import SQLQueryPlan
 from app.llm.prompts import SYSTEM_PROMPT_TEMPLATE
-from datetime import datetime
+from datetime import datetime, timedelta
+from app.llm.metadata import get_metadata_context
 
 class LLMService:
     def __init__(self):
@@ -15,7 +16,14 @@ class LLMService:
 
     def generate_sql(self, user_question: str, ddl_context: str, history: list = []) -> SQLQueryPlan:
         
-        # 1. Format History into a readable string
+        # 1. Calculate Yesterday's DS (The "Truth" Date)
+        yesterday = datetime.now() - timedelta(days=1)
+        yesterday_ds = yesterday.strftime("%Y%m%d")
+
+        # 2. Get the Metadata Block
+        metadata_block = get_metadata_context(yesterday_ds)
+
+        # 3. Format History into a readable string
         history_block = "No previous context."
         if history:
             # We take the last 2 turns (User + AI) to keep it focused
@@ -29,6 +37,7 @@ class LLMService:
         # Build the prompt
         prompt = SYSTEM_PROMPT_TEMPLATE.format(
             ddl_context=ddl_context,
+            metadata_context=metadata_block,
             history_block=history_block,
             current_date=datetime.now().strftime("%Y-%m-%d"),
             user_question=user_question
