@@ -34,7 +34,7 @@ class LLMService:
         # Fallback
         return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
-    def generate_sql(self, user_question: str, ddl_context: str, history: list = []) -> SQLQueryPlan:
+    async def generate_sql(self, user_question: str, ddl_context: str, history: list = []) -> SQLQueryPlan:
         
         # 1. Get REAL Partition (Intelligence Upgrade)
         latest_ds = await self.get_latest_partition("public.user_profile_360")

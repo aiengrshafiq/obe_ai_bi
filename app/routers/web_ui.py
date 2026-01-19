@@ -47,7 +47,7 @@ async def chat_endpoint(payload: ChatRequest):
     # -------------------
     
     # 2. Call AI (Pydantic Schema ensures structure)
-    plan = llm_service.generate_sql(user_msg, ddl, history)
+    plan = await llm_service.generate_sql(user_msg, ddl, history)
     
     if not plan.is_safe:
         return {
