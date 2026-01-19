@@ -58,7 +58,7 @@ class LLMService:
             ddl_context=ddl_context,
             metadata_context=metadata_block,
             history_block=history_block,
-            current_date=f"{datetime.now().strftime('%Y-%m-%d')} (Latest Data Available: {latest_ds})"
+            current_date=datetime.now().strftime("%Y-%m-%d"),
             user_question=user_question
         )
 
