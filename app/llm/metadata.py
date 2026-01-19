@@ -4,99 +4,94 @@ Contains the Business Logic, Semantic Rules, and Gold Standard Examples.
 This is the 'Brain' that guides the AI.
 """
 
-# The "Truth" about your columns (Updated from BI Documentation)
+# The "Truth" about your columns
 COLUMN_DEFINITIONS = {
-    # 1. Volume & Finance
-    "volume": "total_trade_volume (Lifetime total)",
-    "deposit": "total_deposit_volume (Lifetime total)",
-    "revenue": "total_net_fees (Fees after rebates)",
-    "wallet_balance": "total_wallet_balance (Available + Frozen)",
+    # 1. Finance & Volume
+    "volume": "total_trade_volume",
+    "deposit": "total_deposit_volume",
+    "revenue": "total_net_fees",
+    "wallet_balance": "total_wallet_balance",
     
-    # 2. User Status & Definitions
+    # 2. User Definitions
     "active_user": "is_active_user_7d = 1 (Logged in last 7 days)",
     "active_trader": "is_active_trader_7d = 1 (Traded last 7 days)",
-    "kyc": "kyc_status (0=None, 1=Basic, 2=Advanced)",
-    "risk": "max_risk_score (0.0 to 1.0)",
-    "good_user": "is_good_user = 1 (Clean user, low risk)",
+    "depositor": "first_deposit_date IS NOT NULL (Has made at least one deposit)",
+    "referral_user": "inviter_user_code IS NOT NULL AND inviter_user_code != 0",
     
-    # 3. Segments (Use these exact strings in WHERE clauses)
-    "segments": [
-        "VIP", "High Value", "Medium Value", "Low Value", 
-        "Depositor Only", "Registered Only"
-    ],
-    "lifecycle": [
-        "Acquisition", "Onboarding", "Active", "At Risk", "Churned"
-    ],
-    "trading_profile": [
-        "Futures Focused", "Spot Focused", "Mixed Trader", "Non Trader"
-    ]
+    # 3. Acronyms (CRITICAL FOR BI)
+    "NRU": "New Registration Users (Filter: registration_date_only = Target Date)",
+    "FTD": "First Time Depositors (Filter: DATE(first_deposit_date) = Target Date)",
+    
+    # 4. Grouping Preferences
+    "kyc_status": "Use 'kyc_status_desc' for grouping/display (not the numeric code)",
+    
+    # 5. Segments
+    "segments": ["VIP", "High Value", "Medium Value", "Low Value", "Depositor Only"],
 }
 
-# 5 "Gold Standard" Examples. 
-# These teach the AI how to query the Cube correctly (filtering by DS!).
+# "Gold Standard" Examples to teach the Logic Patterns
 FEW_SHOT_EXAMPLES = """
-**Example 1: Active Users vs Active Traders (Current State)**
-User: "How many active traders do we have?"
+**Example 1: Snapshot Aggregation (The "Yesterday Rule")**
+User: "Show me KYC status breakdown."
 SQL: 
-SELECT count(user_code) 
+SELECT kyc_status_desc, COUNT(user_code) 
 FROM public.user_profile_360 
 WHERE ds = '{yesterday_ds}' 
-AND is_active_trader_7d = 1;
+GROUP BY kyc_status_desc;
 
-**Example 2: Segmentation Analysis**
-User: "Show me the breakdown of users by lifecycle stage."
+**Example 2: Historical Events in Snapshot (The "Date Filter" Pattern)**
+User: "How many new registrations (NRU) did we have yesterday?"
 SQL: 
-SELECT lifecycle_stage, COUNT(user_code) as user_count
+SELECT COUNT(user_code) 
 FROM public.user_profile_360 
 WHERE ds = '{yesterday_ds}' 
-GROUP BY lifecycle_stage
-ORDER BY user_count DESC;
+AND registration_date_only = '{yesterday_dash}';
 
-**Example 3: High Value Query**
-User: "List the top 5 'High Value' users by total volume."
+**Example 3: Date Range Analysis**
+User: "Show me the trend of daily registrations for December 2025."
 SQL: 
-SELECT user_code, email, country, total_trade_volume 
+SELECT registration_date_only, COUNT(user_code) 
 FROM public.user_profile_360 
 WHERE ds = '{yesterday_ds}' 
-AND user_segment = 'High Value'
-ORDER BY total_trade_volume DESC 
-LIMIT 5;
+AND registration_date_only BETWEEN '2025-12-01' AND '2025-12-31'
+GROUP BY registration_date_only
+ORDER BY registration_date_only;
 
-**Example 4: Risk Analysis**
-User: "Who are the risky users with high balance?"
+**Example 4: Referral Funnel (No Deposit)**
+User: "How many users joined via referral but never deposited?"
 SQL: 
-SELECT user_code, max_risk_score, total_wallet_balance
-FROM public.user_profile_360
-WHERE ds = '{yesterday_ds}'
-AND is_good_user = 0
-AND total_wallet_balance > 1000
-ORDER BY max_risk_score DESC;
-
-**Example 5: Referral Performance**
-User: "Which users have referred the most people?"
-SQL: 
-SELECT user_code, total_direct_referrals, total_referral_commission
+SELECT COUNT(user_code) 
 FROM public.user_profile_360 
 WHERE ds = '{yesterday_ds}' 
-AND is_referrer = 1
-ORDER BY total_direct_referrals DESC 
-LIMIT 10;
+AND inviter_user_code IS NOT NULL 
+AND inviter_user_code != 0 
+AND first_deposit_date IS NULL;
+
+**Example 5: First Time Deposits (FTD)**
+User: "Count FTD users for Jan 1st 2026."
+SQL: 
+SELECT COUNT(user_code) 
+FROM public.user_profile_360 
+WHERE ds = '{yesterday_ds}' 
+AND DATE(first_deposit_date) = '2026-01-01';
 """
 
 def get_metadata_context(yesterday_ds: str) -> str:
-    """
-    Returns the formatted block to inject into the Prompt.
-    """
+    # Helper to create YYYY-MM-DD version of the DS for date matching
+    try:
+        y_dash = f"{yesterday_ds[:4]}-{yesterday_ds[4:6]}-{yesterday_ds[6:]}"
+    except:
+        y_dash = "2026-01-01" # Fallback
+
     return f"""
     **BUSINESS LOGIC & RULES:**
-    1. **The 'Yesterday' Rule:** This data is a DAILY SNAPSHOT. You MUST filter by `ds = '{yesterday_ds}'` for ANY question about "current" status (e.g. current balance, total users).
-    2. **Active Definition:** - If user asks for "Active Users", use `is_active_user_7d`.
-       - If user asks for "Active Traders", use `is_active_trader_7d`.
-    3. **Segments:** Use the exact string values provided below for `user_segment` or `lifecycle_stage`.
+    1. **The 'Yesterday' Rule:** ALWAYS filter by `ds = '{yesterday_ds}'` unless specifically asked for history comparison.
+    2. **Event vs Snapshot:** To find "New Users" or "Events" on a specific day, do NOT change the `ds`. Keep `ds = '{yesterday_ds}'` and filter the specific column (e.g. `registration_date` or `first_deposit_date`).
+    3. **Acronyms:** NRU = New Registrations. FTD = First Time Deposits.
     
     **KEY COLUMN DEFINITIONS:**
     {COLUMN_DEFINITIONS}
     
-    **CORRECT SQL EXAMPLES (Study these patterns):**
-    {FEW_SHOT_EXAMPLES.format(yesterday_ds=yesterday_ds)}
+    **CORRECT SQL EXAMPLES:**
+    {FEW_SHOT_EXAMPLES.format(yesterday_ds=yesterday_ds, yesterday_dash=y_dash)}
     """

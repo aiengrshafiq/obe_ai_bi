@@ -14,14 +14,33 @@ class LLMService:
             base_url=settings.AI_BASE_URL
         )
 
+    async def get_latest_partition(self, table_name: str) -> str:
+        """
+        Queries the DB to find the actual latest 'ds' partition.
+        Fallback to yesterday if DB fails.
+        """
+        try:
+            # We use the raw executor you already have
+            from app.db.raw_executor import execute_raw_sql
+            
+            sql = f"SELECT max(ds) as max_ds FROM {table_name}"
+            result = await execute_raw_sql(sql)
+            
+            if result and result[0]['max_ds']:
+                return result[0]['max_ds']
+        except Exception as e:
+            print(f"⚠️ Partition Check Failed: {e}")
+            
+        # Fallback
+        return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+
     def generate_sql(self, user_question: str, ddl_context: str, history: list = []) -> SQLQueryPlan:
         
-        # 1. Calculate Yesterday's DS (The "Truth" Date)
-        yesterday = datetime.now() - timedelta(days=1)
-        yesterday_ds = yesterday.strftime("%Y%m%d")
+        # 1. Get REAL Partition (Intelligence Upgrade)
+        latest_ds = await self.get_latest_partition("public.user_profile_360")
 
         # 2. Get the Metadata Block
-        metadata_block = get_metadata_context(yesterday_ds)
+        metadata_block = get_metadata_context(latest_ds)
 
         # 3. Format History into a readable string
         history_block = "No previous context."
@@ -39,7 +58,7 @@ class LLMService:
             ddl_context=ddl_context,
             metadata_context=metadata_block,
             history_block=history_block,
-            current_date=datetime.now().strftime("%Y-%m-%d"),
+            current_date=f"{datetime.now().strftime('%Y-%m-%d')} (Latest Data Available: {latest_ds})"
             user_question=user_question
         )
 
