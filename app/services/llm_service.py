@@ -61,7 +61,8 @@ class LLMService:
             metadata_context=metadata_block,
             history_block=history_block,
             current_date=datetime.now().strftime("%Y-%m-%d"),
-            user_question=user_question
+            user_question=user_question,
+            latest_ds=latest_ds
         )
 
         try:
