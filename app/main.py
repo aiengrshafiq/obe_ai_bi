@@ -30,7 +30,7 @@ setup_vanna_db_connection()
 @app.on_event("startup")
 async def startup_event():
     # Set force_retrain=True if you updated the Cube Definition
-    await train_vanna_on_startup(force_retrain=True)
+    await train_vanna_on_startup(force_retrain=False)
 
 # 5. Security Middleware
 class AuthMiddleware(BaseHTTPMiddleware):
