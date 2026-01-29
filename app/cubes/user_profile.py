@@ -1,50 +1,103 @@
 # app/cubes/user_profile.py
 
+# 1. Identity
 NAME = "User Profile Cube"
+DESCRIPTION = "Contains daily snapshots of user profiles, lifetime stats, risk scores, and current balances."
 
+# 2. DDL (The Structure)
+# Note: Copied exactly from your validated schema.
 DDL = """
 CREATE TABLE public.user_profile_360 (
-    user_code BIGINT,
+    -- IDENTITY
+    user_code BIGINT,           -- Unique User ID
     email TEXT,
     country TEXT,
+    
+    -- DATES
     registration_date TIMESTAMPTZ,
-    registration_date_only DATE, 
-    first_deposit_date TIMESTAMPTZ,
-    is_active_user_7d BIGINT,
-    is_active_trader_7d BIGINT, 
-    kyc_status_desc TEXT,
-    user_segment TEXT,
-    lifecycle_stage TEXT,
-    total_trade_volume DECIMAL,
-    total_deposit_volume DECIMAL,
-    total_net_fees DECIMAL,
-    total_wallet_balance DECIMAL,
-    inviter_user_code BIGINT,
-    ds TEXT -- Partition 'YYYYMMDD'
+    registration_date_only DATE, -- Use for daily registration counts (NRU)
+    first_deposit_date TIMESTAMPTZ, -- FTD Date. If NOT NULL, user is a depositor.
+    
+    -- STATUS FLAGS (1=Yes, 0=No)
+    is_active_user_7d BIGINT,   -- Logged in last 7 days
+    is_active_trader_7d BIGINT, -- Traded last 7 days
+    is_good_user BIGINT,        -- Low risk
+    kyc_status_desc TEXT,       -- e.g. 'Basic', 'Advanced'
+    
+    -- SEGMENTS
+    user_segment TEXT,          -- 'VIP', 'High Value', 'Medium Value', 'Low Value'
+    lifecycle_stage TEXT,       -- 'Acquisition', 'Active', 'Churned'
+    
+    -- LIFETIME METRICS (Accumulated totals as of 'ds')
+    total_trade_volume DECIMAL,    -- All-time Volume
+    total_deposit_volume DECIMAL,  -- All-time Deposit
+    total_net_fees DECIMAL,        -- All-time Revenue
+    total_wallet_balance DECIMAL,  -- Current Balance (Available + Frozen)
+    
+    -- REFERRALS
+    inviter_user_code BIGINT,      -- Who invited them (NULL if none)
+    total_direct_referrals BIGINT, -- How many people they invited
+    
+    -- PARTITION
+    ds TEXT                        -- Date Partition 'YYYYMMDD' (e.g. '20260118')
 );
 """
 
+# 3. Documentation (The Semantics)
+# This replaces 'COLUMN_DEFINITIONS' and adds the "Critical Rules".
 DOCS = """
-**Definitions:**
+**Table Purpose:**
+This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific day (`ds`).
+
+**Critical SQL Rules:**
+1. **The 'Yesterday' Rule (Partitioning):** - You MUST filter by `ds = '{latest_ds}'` for ANY question about "current" status (e.g., "total users", "current balance").
+   - Do NOT scan all partitions unless the user explicitly asks for "History" or "Trend".
+2. **Forbidden Tables:** Do NOT hallucinate. You can ONLY query `public.user_profile_360`.
+
+**Column Definitions:**
 - **Volume**: Use `total_trade_volume`.
 - **Deposit**: Use `total_deposit_volume`.
-- **Active User**: `is_active_user_7d = 1`.
-- **Active Trader**: `is_active_trader_7d = 1`.
-- **NRU**: New Registration Users (Filter `registration_date_only`).
-- **FTD**: First Time Depositors (Filter `DATE(first_deposit_date)`).
+- **Revenue**: Use `total_net_fees`.
+- **Active User**: Use `is_active_user_7d = 1` (People who logged in).
+- **Active Trader**: Use `is_active_trader_7d = 1` (People who actually traded).
+- **Depositor**: `first_deposit_date IS NOT NULL`.
+- **Referral User**: `inviter_user_code IS NOT NULL`.
 
-**Rules:**
-- **Yesterday Rule**: ALWAYS filter by `ds = '{latest_ds}'` for current status.
-- **Events**: To find events on a specific day, keep `ds` as latest and filter the specific date column.
+**Acronyms & Business Terms:**
+- **NRU (New Registration Users)**: Count of users where `registration_date_only` equals the target date.
+- **FTD (First Time Depositors)**: Count of users where `DATE(first_deposit_date)` equals the target date.
+- **KYC Status**: Always group by `kyc_status_desc` (e.g., 'Basic'), never by numeric codes.
+
+**Segments (Exact Spelling):**
+- `user_segment`: 'VIP', 'High Value', 'Medium Value', 'Low Value', 'Depositor Only'
 """
 
+# 4. Training Examples (The Patterns)
+# Vanna uses these to learn "How to write SQL" for this specific schema.
+# Note: We use {latest_ds} placeholder which the System Prompt will fill in at runtime.
 EXAMPLES = [
     {
-        "question": "How many active traders?", 
+        "question": "Show me KYC status breakdown.",
+        "sql": "SELECT kyc_status_desc, COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' GROUP BY kyc_status_desc;"
+    },
+    {
+        "question": "How many new registrations (NRU) did we have yesterday?",
+        "sql": "SELECT COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND registration_date_only = '{latest_ds_dash}';"
+    },
+    {
+        "question": "Show me the trend of daily registrations for December 2025.",
+        "sql": "SELECT registration_date_only, COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND registration_date_only BETWEEN '2025-12-01' AND '2025-12-31' GROUP BY registration_date_only ORDER BY registration_date_only;"
+    },
+    {
+        "question": "How many active traders do we have?",
         "sql": "SELECT count(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND is_active_trader_7d = 1;"
     },
     {
-        "question": "Daily registrations trend Dec 2025", 
-        "sql": "SELECT registration_date_only, COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND registration_date_only BETWEEN '2025-12-01' AND '2025-12-31' GROUP BY registration_date_only;"
+        "question": "List top 5 VIP users by volume.",
+        "sql": "SELECT user_code, email, total_trade_volume FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND user_segment = 'VIP' ORDER BY total_trade_volume DESC LIMIT 5;"
+    },
+    {
+        "question": "Count FTD users for Jan 1st 2026.",
+        "sql": "SELECT COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND DATE(first_deposit_date) = '2026-01-01';"
     }
 ]

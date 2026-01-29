@@ -4,11 +4,9 @@ from vanna.openai import OpenAI_Chat
 from vanna.chromadb import ChromaDB_VectorStore
 from app.core.config import settings
 
-# We inherit from the LOCAL classes to avoid Vanna Cloud
 class OneBullexVanna(ChromaDB_VectorStore, OpenAI_Chat):
     def __init__(self):
         # 1. Local Vector Storage (Saves to /app/vanna_storage on the server)
-        # using absolute path to ensure it persists in the working directory
         storage_path = os.path.join(os.getcwd(), 'vanna_storage')
         ChromaDB_VectorStore.__init__(self, config={'path': storage_path})
         

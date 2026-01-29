@@ -83,6 +83,7 @@
         // Store conversation history in memory
         let chatHistory = [];
         window.queryResults = {};
+        
         function fillInput(text) {
             const input = document.getElementById('user-input');
             input.value = text;
@@ -128,13 +129,13 @@
             scrollToBottom();
 
             try {
-                // SEND REQUEST WITH HISTORY
+                // SEND REQUEST
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         message: text,
-                        history: chatHistory // <--- Pass the history
+                        history: chatHistory 
                     })
                 });
                 const data = await res.json();
@@ -142,15 +143,10 @@
                 document.getElementById(loadingId).remove();
 
                 // SAVE TO HISTORY (Client Side)
-                // 1. Add User Question
                 chatHistory.push({ role: "user", content: text });
-                
-                // 2. Add AI Response (We save the SQL, not the raw JSON, so AI sees code next time)
                 if (data.sql) {
                     chatHistory.push({ role: "assistant", content: data.sql });
                 }
-
-                // Keep history small (Last 4 messages max) to prevent huge payloads
                 if (chatHistory.length > 4) chatHistory = chatHistory.slice(-4);
 
                 // 3. Render Logic
@@ -192,7 +188,7 @@
                             ` : ''}
                         </div>`;
 
-                    // Smart Insight (Keep existing)
+                    // Smart Insight 
                     if (data.insight) {
                         contentHTML += `
                             <div class="mb-4 bg-indigo-50 border-l-4 border-indigo-500 p-3 rounded-r flex items-start gap-3">
@@ -206,7 +202,17 @@
                             </div>`;
                     }
 
-                    // --- VISUALIZATION LOGIC (Keep existing) ---
+                    // --- VISUALIZATION LOGIC ---
+                    // Handle Vanna's 'plotly' signal
+                    if (data.visual_type === 'plotly') {
+                        // Heuristic: Check if data implies time-series
+                        if (data.data && data.data.length > 0) {
+                            const keys = Object.keys(data.data[0]);
+                            const hasDate = keys.some(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('ds'));
+                            data.visual_type = hasDate ? 'line' : 'bar';
+                        }
+                    }
+
                     let visualType = data.visual_type;
                     if (data.data && data.data.length > 1 && visualType === 'kpi') {
                         visualType = 'table';
@@ -220,12 +226,12 @@
                                 <div class="text-gray-500 text-sm uppercase tracking-wide mb-1">${data.title || 'Result'}</div>
                                 <div class="text-4xl font-bold text-blue-900">${val}</div>
                             </div>`;
-                            
+                        
                     } else if (['bar', 'line', 'pie'].includes(visualType) && data.data.length > 0) {
                         const chartId = 'chart-' + Date.now();
                         contentHTML += `
                             <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
-                                <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title}</h4>
+                                <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title || 'Analysis Chart'}</h4>
                                 <div id="${chartId}" style="width: 100%; height: 350px;"></div>
                             </div>`;
                         setTimeout(() => renderChart(chartId, visualType, data.data, data.x_axis, data.y_axis), 100);
@@ -249,28 +255,28 @@
                 if(document.getElementById(loadingId)) document.getElementById(loadingId).remove();
             }
         }
+
         async function runCustomSQL(btn) {
-            // 1. Get the SQL from the textarea
-            const sqlEditorDiv = btn.closest('.bg-gray-50'); // The gray editor box
+            // Get SQL from textarea
+            const sqlEditorDiv = btn.closest('.bg-gray-50');
             const textarea = sqlEditorDiv.querySelector('textarea');
             const sql = textarea.value.trim();
             
-            // Navigate up to find the Main Result Container and the Header Wrapper
-            // Hierarchy: EditorDiv -> Details -> HeaderWrapper (Flex)
+            // Navigate DOM
             const detailsElement = sqlEditorDiv.parentElement; 
             const headerWrapper = detailsElement.parentElement; 
-            const resultArea = headerWrapper.parentElement; // The main bot message bubble containing everything
+            const resultArea = headerWrapper.parentElement; 
 
             if (!sql) return;
 
-            // 2. Show Loading on Button
+            // Loading State
             const originalText = btn.innerText;
             btn.innerText = "Running...";
             btn.disabled = true;
             btn.classList.add('opacity-75');
 
             try {
-                // 3. Send to Backend
+                // Call Backend
                 const res = await fetch('/api/run_custom_sql', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -287,20 +293,16 @@
                     return;
                 }
 
-                // --- FIX STARTS HERE: Handle Export Button ---
-                
-                // 4. Save New Data to Global Cache
+                // Save for Export
                 const resultId = Date.now();
                 if (data.data && data.data.length > 0) {
                     window.queryResults[resultId] = data.data;
                 }
 
-                // 5. Update/Add Export Button
-                // Remove old button if it exists (it's the second child of headerWrapper usually)
+                // Update Export Button
                 const oldExportBtn = headerWrapper.querySelector('button.ml-2');
                 if (oldExportBtn) oldExportBtn.remove();
 
-                // Create New Button if we have data
                 if (data.data && data.data.length > 0) {
                     const exportBtn = document.createElement('button');
                     exportBtn.className = "ml-2 flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600 bg-white border border-gray-200 hover:border-blue-300 px-3 py-1.5 rounded-lg shadow-sm transition-all whitespace-nowrap";
@@ -310,28 +312,31 @@
                         Export CSV`;
                     headerWrapper.appendChild(exportBtn);
                 }
-                // --- FIX ENDS HERE ---
 
-                // 6. Update UI (Chart/Table)
-                // Remove old visualizations
+                // Render New Result
                 const oldChart = resultArea.querySelector('.border.rounded-xl');
                 if(oldChart) oldChart.remove();
                 
                 const oldTable = resultArea.querySelector('.overflow-x-auto.border'); 
                 if(oldTable) oldTable.remove();
                 
-                // Also remove any old error messages or empty states if present
                 const oldError = resultArea.querySelector('.text-red-600');
                 if(oldError) oldError.remove();
 
-                // Append new result
                 const resultDiv = document.createElement('div');
                 
+                // If Vanna/Backend sends 'plotly' or chart types
+                if (data.visual_type === 'plotly') {
+                     const keys = Object.keys(data.data[0]);
+                     const hasDate = keys.some(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('ds'));
+                     data.visual_type = hasDate ? 'line' : 'bar';
+                }
+
                 if (['bar', 'line', 'pie'].includes(data.visual_type) && data.data.length > 0) {
                     const chartId = 'chart-' + Date.now();
                     resultDiv.innerHTML = `
                         <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm mt-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title}</h4>
+                            <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title || 'Result Chart'}</h4>
                             <div id="${chartId}" style="width: 100%; height: 350px;"></div>
                         </div>`;
                     resultArea.appendChild(resultDiv);
@@ -344,7 +349,8 @@
 
             } catch (e) {
                 console.error(e);
-                btn.innerText = "Error";
+                alert("Execution failed: " + e);
+                btn.innerText = originalText;
                 btn.disabled = false;
             }
         }
@@ -359,10 +365,9 @@
             if (!chartDom) return;
             const myChart = echarts.init(chartDom);
             
-            // Auto-detect keys if missing
             if (!xKey || !yKey) {
                 const keys = Object.keys(data[0]);
-                xKey = keys.find(k => k.includes('date') || k.includes('name')) || keys[0];
+                xKey = keys.find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('name') || k.toLowerCase().includes('ds')) || keys[0];
                 yKey = keys.find(k => k !== xKey) || keys[1];
             }
 
@@ -413,29 +418,20 @@
                 alert("No data to export.");
                 return;
             }
-
-            // 1. Extract Headers
             const headers = Object.keys(data[0]);
-            
-            // 2. Convert to CSV String
             const csvRows = [];
-            // Add Header Row
             csvRows.push(headers.join(','));
             
-            // Add Data Rows
             for (const row of data) {
                 const values = headers.map(header => {
                     const val = row[header];
-                    // Escape quotes and wrap in quotes if string contains comma
-                    const escaped = ('' + val).replace(/"/g, '\\"');
+                    const escaped = ('' + (val ?? '')).replace(/"/g, '\\"');
                     return `"${escaped}"`;
                 });
                 csvRows.push(values.join(','));
             }
             
             const csvString = csvRows.join('\n');
-
-            // 3. Trigger Download
             const blob = new Blob([csvString], { type: 'text/csv' });
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');

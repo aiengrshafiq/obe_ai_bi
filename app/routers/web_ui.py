@@ -1,131 +1,153 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Request
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from app.services.llm_service import LLMService
-from app.db.metadata_store import get_ddl_context
-from app.db.raw_executor import execute_raw_sql
-from typing import List, Optional, Dict
+from typing import List, Dict, Any
+import pandas as pd
+import json
+from datetime import datetime, timedelta
 
-
+# Import Vanna and Database Tools
+from app.services.vanna_wrapper import vn
+from app.db.raw_executor import execute_raw_sql # Still needed for async partition check
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-# Initialize Service
-llm_service = LLMService()
-
 class ChatRequest(BaseModel):
     message: str
-    # New Field: Optional list of previous messages
-    # Format: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
     history: List[Dict[str, str]] = []
 
 @router.get("/")
 async def get_chat_ui(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request})
 
+# --- HELPER: Get Latest Partition ---
+async def get_current_ds() -> str:
+    """
+    Checks the DB for the latest partition. 
+    Crucial for the 'Yesterday Rule'.
+    """
+    try:
+        # We use the raw async executor for speed
+        sql = "SELECT max(ds) as max_ds FROM public.user_profile_360"
+        result = await execute_raw_sql(sql)
+        if result and result[0]['max_ds']:
+            return result[0]['max_ds']
+    except Exception as e:
+        print(f"⚠️ Partition Check Failed: {e}")
+    
+    # Fallback to yesterday
+    return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+
 @router.post("/api/chat")
 async def chat_endpoint(payload: ChatRequest):
-    """
-    Orchestrator Logic:
-    1. User Question -> LLM -> JSON Plan
-    2. JSON Plan -> Execute SQL -> Result
-    3. Result -> Return to UI
-    """
     user_msg = payload.message
-    history = payload.history
     
-    # 1. Get Context
-    ddl = get_ddl_context()
+    # 1. Inject Context (The "Intelligence" Layer)
+    latest_ds = await get_current_ds()
+    
+    # We prepend the constraint so Vanna knows the date context
+    contextualized_question = (
+        f"The latest valid partition is ds='{latest_ds}'. "
+        f"Always filter by this ds unless the user asks for history. "
+        f"Question: {user_msg}"
+    )
+    
+    print(f"🤖 Vanna Asking: {contextualized_question}")
 
-    # --- DEBUG PRINT ---
-    print(f"DEBUG: Current DDL Size: {len(ddl)} chars")
-    if "dws_user_deposit_withdraw_detail_di" in ddl:
-        print("CRITICAL ERROR: Old DDL is still loaded!")
-    else:
-        print("SUCCESS: New DDL is loaded.")
-    # -------------------
-    
-    # 2. Call AI (Pydantic Schema ensures structure)
-    plan = await llm_service.generate_sql(user_msg, ddl, history)
-    
-    if not plan.is_safe:
+    try:
+        # 2. Generate SQL (RAG + LLM)
+        # Vanna automatically searches the vector DB for the right tables
+        sql_query = await vn.generate_sql_async(question=contextualized_question)
+        
+        if not sql_query or "SELECT" not in sql_query.upper():
+            return {
+                "type": "error",
+                "message": "I couldn't generate a valid query. Please try rephrasing."
+            }
+
+        # 3. Execute SQL
+        # This uses the Synchronous Engine via our wrapper
+        df = await vn.run_sql_async(sql_query)
+        
+        # Handle Empty Data
+        if df is None or df.empty:
+            return {
+                "type": "success",
+                "thought": "Query executed successfully but returned no data.",
+                "sql": sql_query,
+                "data": [],
+                "visual_type": "none"
+            }
+
+        # 4. Generate Chart Code (The "Manager's Requirement")
+        # Vanna returns Python code string for Plotly
+        plotly_code = await vn.generate_plotly_code_async(
+            question=user_msg, 
+            sql=sql_query, 
+            df=df
+        )
+        
+        # Convert Dataframe to JSON-friendly dict for the UI table
+        table_data = df.head(100).to_dict(orient='records')
+        
+        # Determine Visual Type for Frontend
+        visual_type = "table"
+        if len(df) > 1 and len(df.columns) >= 2:
+            visual_type = "plotly"  # Tell frontend to look for Plotly code
+        
         return {
-            "type": "error",
-            "message": "I cannot answer this question. It might be asking for data outside my permission scope.",
-            "thought": plan.thought_process
+            "type": "success",
+            "thought": f"Generated SQL based on logic for ds='{latest_ds}'",
+            "sql": sql_query,
+            "data": table_data,
+            "visual_type": visual_type,
+            "plotly_code": plotly_code # This is the Python code string
         }
-    
-    # 3. Execute SQL (If valid)
-    data = []
-    insight = ""
-    if plan.sql_query:
-        # Safety check: Ensure strict read-only
-        if "drop" in plan.sql_query.lower() or "delete" in plan.sql_query.lower():
-             return {"type": "error", "message": "Unsafe query detected."}
-             
-        data = await execute_raw_sql(plan.sql_query)
 
-        # 4. Generate Insight (NEW STEP)
-        # Only generate if we have data and it's not a huge raw dump
-        if data and len(data) > 0:
-            insight = await llm_service.generate_insight(user_msg, data)
+    except Exception as e:
+        print(f"❌ Chat Error: {e}")
+        return {
+            "type": "error", 
+            "message": f"An error occurred: {str(e)}"
+        }
 
-    return {
-        "type": "success",
-        "thought": plan.thought_process,
-        "sql": plan.sql_query,
-        
-        # Pass the new visual config
-        "visual_type": plan.visualization_type,
-        "x_axis": plan.chart_x_axis,
-        "y_axis": plan.chart_y_axis,
-        "title": plan.chart_title,
-        
-        "data": data,
-        "insight": insight
-    }
-
-
-# 1. Request Model for Custom SQL
+# --- Custom SQL Endpoint (Simplified for Vanna) ---
 class CustomSQLRequest(BaseModel):
     sql_query: str
 
-# 2. New Endpoint
 @router.post("/api/run_custom_sql")
 async def run_custom_sql_endpoint(payload: CustomSQLRequest):
-    """
-    Executes SQL manually edited by the user.
-    """
     sql = payload.sql_query.strip()
     
-    # Basic Safety Checks
-    if not sql.lower().startswith("select"):
-        return {"type": "error", "message": "Only SELECT statements are allowed."}
     if any(x in sql.lower() for x in ["drop", "delete", "insert", "update", "truncate"]):
         return {"type": "error", "message": "Unsafe query detected."}
 
     try:
-        # Execute
-        data = await execute_raw_sql(sql)
+        # Run via Vanna wrapper
+        df = await vn.run_sql_async(sql)
         
-        # Auto-detect visualization (Simple logic)
+        if df is None or df.empty:
+             return {"type": "success", "sql": sql, "data": [], "visual_type": "table"}
+
+        # Auto-chart for custom queries
         visual_type = "table"
-        if len(data) > 0:
-            keys = list(data[0].keys())
-            # If 2 columns and one is number -> Bar Chart
-            if len(keys) == 2 and any(isinstance(data[0][k], (int, float)) for k in keys):
-                visual_type = "bar"
-            # If date detected -> Line Chart
-            if "date" in keys[0].lower() or "time" in keys[0].lower() or "ds" in keys[0].lower():
-                visual_type = "line"
-                
+        plotly_code = ""
+        if len(df) > 1 and len(df.columns) >= 2:
+            visual_type = "plotly"
+            # We assume a generic question for custom SQL to get a generic chart
+            plotly_code = await vn.generate_plotly_code_async(
+                question="Visualize this data", 
+                sql=sql, 
+                df=df
+            )
+
         return {
             "type": "success",
             "sql": sql,
-            "data": data,
+            "data": df.head(100).to_dict(orient='records'),
             "visual_type": visual_type,
-            "title": "Custom Query Result"
+            "plotly_code": plotly_code
         }
 
     except Exception as e:
