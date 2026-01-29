@@ -1,6 +1,7 @@
 from app.services.vanna_wrapper import vn
 import app.cubes.user_profile as user_cube
 import app.cubes.trade_activity as trade_cube  # <--- NEW IMPORT
+import app.cubes.points_system as points_cube
 
 async def train_vanna_on_startup(force_retrain: bool = False):
     print("⚡ Checking Vanna Knowledge Base...")
@@ -32,5 +33,13 @@ async def train_vanna_on_startup(force_retrain: bool = False):
     vn.train(documentation=trade_cube.DOCS)
     for ex in trade_cube.EXAMPLES:
         vn.train(question=ex['question'], sql=ex['sql'])
+
+    # --- 3. TRAIN POINTS CUBE (NEW) ---
+    print(f"   -> Training {points_cube.NAME}...")
+    vn.train(ddl=points_cube.DDL)
+    vn.train(documentation=points_cube.DOCS)
+    for ex in points_cube.EXAMPLES:
+        vn.train(question=ex['question'], sql=ex['sql'])
+    # ----------------------------------
 
     print("✅ Auto-Training Complete!")
