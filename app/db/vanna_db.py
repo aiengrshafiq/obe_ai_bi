@@ -1,5 +1,5 @@
 # app/db/vanna_db.py
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text  # <--- IMPORT text
 import pandas as pd
 from app.core.config import settings
 from app.services.vanna_wrapper import vn
@@ -15,8 +15,11 @@ def setup_vanna_db_connection():
 
         def run_sql_hologres(sql: str) -> pd.DataFrame:
             try:
-                # Execution logic
-                return pd.read_sql(sql, vanna_engine)
+                # --- FIX FOR SQLALCHEMY 2.0 ---
+                # We must use a connection context and wrap the SQL in text()
+                with vanna_engine.connect() as connection:
+                    return pd.read_sql(text(sql), connection)
+                # ------------------------------
             except Exception as e:
                 print(f"❌ Vanna SQL Execution Error: {e}")
                 return pd.DataFrame()
