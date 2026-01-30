@@ -31,6 +31,7 @@ CREATE TABLE public.user_profile_360 (
     -- LIFETIME METRICS (Accumulated totals as of 'ds')
     total_trade_volume DECIMAL,    -- All-time Volume
     total_deposit_volume DECIMAL,  -- All-time Deposit
+    total_withdraw_volume DECIMAL, -- All-time Withdrawals
     total_net_fees DECIMAL,        -- All-time Revenue
     total_wallet_balance DECIMAL,  -- Current Balance (Available + Frozen)
     

@@ -17,3 +17,7 @@ vanna==0.7.5
 chromadb>=0.4.0
 plotly>=5.0.0
 kaleido
+
+passlib[bcrypt]   # Password hashing
+python-jose[cryptography]  # JWT Tokens
+sqlalchemy

@@ -41,7 +41,27 @@
                 <span class="bg-slate-800 text-slate-400 group-hover:text-green-400 w-6 h-6 flex items-center justify-center rounded text-xs">📊</span>
                 <span class="text-slate-300 text-sm group-hover:text-white">Trade Counts</span>
             </button>
+            <button onclick="location.href='/admin/logs'"
+                    class="w-full group flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
+                <span class="bg-slate-900 text-slate-400 group-hover:text-purple-400 w-6 h-6 flex items-center justify-center rounded">
+                    📜
+                </span>
+                <span class="text-slate-300 text-sm font-medium group-hover:text-white">
+                    System Logs
+                </span>
+            </button>
+
         </nav>
+        <div class="p-4 border-t border-slate-800 mt-auto">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold" id="user-avatar">U</div>
+                <div class="text-sm font-medium text-slate-300" id="username-display">User</div>
+            </div>
+            <button onclick="logout()" class="w-full text-xs text-red-400 hover:text-red-300 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Sign Out
+            </button>
+        </div>
     </aside>
 
     <main class="flex-1 flex flex-col relative bg-white h-full w-full">
@@ -78,7 +98,25 @@
             </div>
         </div>
     </main>
+    <script>
+    // Load Username on Startup
+    document.addEventListener('DOMContentLoaded', () => {
+        const user = localStorage.getItem('username');
+        if(user) {
+            document.getElementById('username-display').innerText = user;
+            document.getElementById('user-avatar').innerText = user.substring(0,2).toUpperCase();
+        } else {
+            // Redirect if no session (optional, serves as double check)
+            if(!localStorage.getItem('access_token')) window.location.href = "/login";
+        }
+    });
 
+    function logout() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('username');
+        window.location.href = "/login";
+    }
+</script>
     <script>
         // Store conversation history in memory
         let chatHistory = [];
@@ -95,6 +133,11 @@
         }
 
         async function sendMessage() {
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                window.location.href = "/login";
+                return;
+            }
             const input = document.getElementById('user-input');
             const container = document.getElementById('chat-container');
             const anchor = document.getElementById('scroll-anchor');
@@ -132,12 +175,23 @@
                 // SEND REQUEST
                 const res = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token
+                    },
                     body: JSON.stringify({
                         message: text,
                         history: chatHistory 
                     })
                 });
+
+                // Handle 401 (Expired Token)
+                if (res.status === 401) {
+                    localStorage.removeItem('access_token');
+                    window.location.href = "/login";
+                    return;
+                }
+
                 const data = await res.json();
                 
                 document.getElementById(loadingId).remove();
@@ -257,6 +311,7 @@
         }
 
         async function runCustomSQL(btn) {
+            const token = localStorage.getItem('access_token');
             // Get SQL from textarea
             const sqlEditorDiv = btn.closest('.bg-gray-50');
             const textarea = sqlEditorDiv.querySelector('textarea');
@@ -279,7 +334,10 @@
                 // Call Backend
                 const res = await fetch('/api/run_custom_sql', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + token // Send Token
+                    },
                     body: JSON.stringify({sql_query: sql})
                 });
                 const data = await res.json();

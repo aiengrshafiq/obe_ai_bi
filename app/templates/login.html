@@ -13,27 +13,60 @@
             <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
         </div>
         <h2 class="text-2xl font-bold text-gray-800 mb-2">OneBullEx Intelligence</h2>
-        <p class="text-sm text-gray-500 mb-6">Enter team access code to continue</p>
+        <p class="text-sm text-gray-500 mb-6">Sign in to access your dashboard</p>
         
-        <form action="/login" method="post" class="space-y-4">
-            <input type="password" name="access_code" placeholder="Access Code" required
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+        <form id="loginForm" class="space-y-4">
+            <input type="text" id="username" placeholder="Username" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="password" id="password" placeholder="Password" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
             
             <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors shadow-md">
-                Unlock System
+                Sign In
             </button>
         </form>
         
-        <div id="error-msg" class="hidden mt-4 text-red-500 text-sm bg-red-50 p-2 rounded">
-            Invalid Access Code
+        <div id="error-msg" class="hidden mt-4 text-red-500 text-sm bg-red-50 p-2 rounded"></div>
+        
+        <div class="mt-6 pt-4 border-t border-gray-100">
+            <a href="/register" class="text-xs text-gray-400 hover:text-blue-500 transition-colors">Create new account</a>
         </div>
     </div>
 
     <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('error')) {
-            document.getElementById('error-msg').classList.remove('hidden');
-        }
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMsg = document.getElementById('error-msg');
+
+            // Convert to URL Encoded Form Data (Required by OAuth2 Standard)
+            const formData = new URLSearchParams();
+            formData.append('username', username);
+            formData.append('password', password);
+
+            try {
+                const res = await fetch('/token', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: formData
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // STORE TOKEN
+                    localStorage.setItem('access_token', data.access_token);
+                    localStorage.setItem('username', username); // Optional for UI
+                    window.location.href = "/";
+                } else {
+                    errorMsg.innerText = "Invalid credentials";
+                    errorMsg.classList.remove('hidden');
+                }
+            } catch (err) {
+                errorMsg.innerText = "Connection failed";
+                errorMsg.classList.remove('hidden');
+            }
+        });
     </script>
 </body>
 </html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneBullex - Register</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="bg-slate-900 h-screen flex items-center justify-center font-[Inter]">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-96 text-center relative">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Create Account</h2>
+        <p class="text-sm text-gray-500 mb-6">Join the Intelligence Team</p>
+        
+        <form id="registerForm" class="space-y-4">
+            <input type="text" id="username" placeholder="Username" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            <input type="password" id="password" placeholder="Password" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <button type="submit" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors shadow-md">
+                Register
+            </button>
+        </form>
+        
+        <div id="msg" class="hidden mt-4 text-sm p-2 rounded"></div>
+        
+        <div class="mt-4 text-xs text-gray-400">
+            Already have an account? <a href="/login" class="text-blue-500 hover:underline">Login here</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const msgDiv = document.getElementById('msg');
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (res.ok) {
+                    msgDiv.className = "mt-4 text-green-600 bg-green-50 p-2 rounded text-sm block";
+                    msgDiv.innerText = "Success! Redirecting to login...";
+                    setTimeout(() => window.location.href = "/login", 1500);
+                } else {
+                    const err = await res.json();
+                    throw new Error(err.detail);
+                }
+            } catch (err) {
+                msgDiv.className = "mt-4 text-red-600 bg-red-50 p-2 rounded text-sm block";
+                msgDiv.innerText = err.message;
+            }
+        });
+    </script>
+</body>
+</html>
