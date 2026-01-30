@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 import json
+import time
 
 # Internal imports
 from app.services.vanna_wrapper import vn
@@ -49,11 +50,15 @@ class UserRegister(BaseModel):
     username: str
     password: str
 
+
+def generate_id():
+    return int(time.time() * 1000)
+
 @router.post("/api/register")
 async def register(user: UserRegister, db = Depends(get_db)):
     if db.query(User).filter(User.username == user.username).first():
         raise HTTPException(status_code=400, detail="User already exists")
-    new_user = User(username=user.username, hashed_password=get_password_hash(user.password))
+    new_user = User(id=generate_id(), username=user.username, hashed_password=get_password_hash(user.password))
     db.add(new_user)
     db.commit()
     return {"status": "User created"}
