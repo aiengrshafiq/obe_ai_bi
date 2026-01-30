@@ -199,15 +199,26 @@
                 // SAVE TO HISTORY (Client Side)
                 chatHistory.push({ role: "user", content: text });
                 if (data.sql) {
+                    // It was a query
                     chatHistory.push({ role: "assistant", content: data.sql });
+                } else if (data.type === 'text' && data.message) {
+                    // CRITICAL FIX: Save the Clarification/Text to history
+                    // This ensures the AI remembers it asked "By volume or count?"
+                    chatHistory.push({ role: "assistant", content: data.message });
                 }
-                if (chatHistory.length > 4) chatHistory = chatHistory.slice(-4);
+
+                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
 
                 // 3. Render Logic
                 let contentHTML = '';
                 
                 if (data.type === 'error') {
                     contentHTML = `<div class="text-red-600 font-medium text-sm">⚠️ ${data.message}</div>`;
+
+                } else if (data.type === 'text') {
+                    // --- NEW: HANDLE CLARIFICATION / TEXT RESPONSE ---
+                    contentHTML = `<div class="text-gray-800 text-sm leading-relaxed">${data.message}</div>`;
+
                 } else {
                     // --- 1. SAVE DATA FOR EXPORT ---
                     const resultId = Date.now();

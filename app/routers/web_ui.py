@@ -120,11 +120,16 @@ async def chat_endpoint(
     {history_context}
     
     CURRENT CONTEXT:
-    - Today's Date is: {today_iso} (Use this for "yesterday", "last 7 days" calculations).
+    - Today's Date is: {today_iso} (Use this for "yesterday", "last 7 days").
     - The Latest Data Partition is: ds='{latest_ds}'.
-    - CRITICAL: Even if filtering by a date range (e.g. registration_date), you MUST ALSO filter by ds='{latest_ds}' to pick the latest snapshot row.
-    - If the user asks about "users" or "they" without context, refer to the PREVIOUS SQL generated.
-    - If the question is completely unrelated to data (e.g. "hi", "weather"), return SQL: SELECT 'Greeting' as msg
+    - CRITICAL: Always filter by ds='{latest_ds}' for snapshots.
+    
+    CRITICAL INSTRUCTIONS:
+    1. If the question is clear and related to data, generate the SQL.
+    2. If the question is AMBIGUOUS (e.g., "Show me top users" without metric), DO NOT GENERATE SQL.
+       Instead, reply exactly like this: "CLARIFICATION: <Your question to the user>"
+    3. If the question is conversational (e.g., "Hello", "Thanks"), reply exactly like this: 
+       "CLARIFICATION: Hello! I am your Data Copilot. Ask me about Users, Volume, or Points."
     
     NEW QUESTION: {user_msg}
     """
@@ -145,25 +150,31 @@ async def chat_endpoint(
     try:
         # 2. Generate SQL (RAG + LLM)
         # Vanna automatically searches the vector DB for the right tables
-        sql_query = await vn.generate_sql_async(question=full_prompt)
+        #sql_query = await vn.generate_sql_async(question=full_prompt)
+        ai_response = await vn.generate_sql_async(question=full_prompt)
 
-        # Check for non-data questions
-        if "SELECT 'Greeting'" in sql_query:
-             return {"type": "text", "message": "Hello! I am your Data Copilot. Ask me about Users, Trades, or Points."}
-        
-        if not sql_query or "SELECT" not in sql_query.upper():
+        # 3. CHECK FOR CLARIFICATION (The Logic Switch)
+        if ai_response.strip().upper().startswith("CLARIFICATION") or "SELECT" not in ai_response.upper():
+            clean_msg = ai_response.replace("CLARIFICATION:", "").strip()
+            
+            # Log it as a success (valid interaction)
+            log_entry.generated_sql = "TEXT_RESPONSE: " + clean_msg
+            log_entry.execution_success = True 
+            db.commit()
+            
             return {
-                "type": "error",
-                "message": "I couldn't generate a valid query. Please try rephrasing."
+                "type": "text", 
+                "message": clean_msg,
+                "visual_type": "none"
             }
 
         # Log Generated SQL
-        log_entry.generated_sql = sql_query
+        log_entry.generated_sql = ai_response
         db.commit()
 
         # 3. Execute SQL
         # This uses the Synchronous Engine via our wrapper
-        df = await vn.run_sql_async(sql_query)
+        df = await vn.run_sql_async(ai_response)
 
         # Log Success
         log_entry.execution_success = True
@@ -174,12 +185,12 @@ async def chat_endpoint(
             return {
                 "type": "success",
                 "thought": "Query executed successfully but returned no data.",
-                "sql": sql_query,
+                "sql": ai_response,
                 "data": [],
                 "visual_type": "none"
             }
 
-        plotly_code = await vn.generate_plotly_code_async(user_msg, sql_query, df)
+        plotly_code = await vn.generate_plotly_code_async(user_msg, ai_response, df)
         table_data = df.head(100).to_dict(orient='records')
         visual_type = "table"
         if len(df) > 1 and len(df.columns) >= 2: visual_type = "plotly"
@@ -187,7 +198,7 @@ async def chat_endpoint(
         return {
             "type": "success",
             "thought": f"Generated SQL based on logic for ds='{latest_ds}'",
-            "sql": sql_query,
+            "sql": ai_response,
             "data": table_data,
             "visual_type": visual_type,
             "plotly_code": plotly_code # This is the Python code string
@@ -198,6 +209,8 @@ async def chat_endpoint(
         log_entry.error_message = str(e)
         db.commit()
         return {"type": "error", "message": str(e)}
+
+
 
 # --- Custom SQL Endpoint (Simplified for Vanna) ---
 class CustomSQLRequest(BaseModel):
