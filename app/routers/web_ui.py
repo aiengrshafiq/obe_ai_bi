@@ -204,6 +204,17 @@ async def chat_endpoint(
                 "visual_type": "none"
             }
 
+        # --- CRITICAL FIX: SANITIZE DATA FOR JSON ---
+        # Python JSON cannot handle NaN or Infinity. We replace them with 0 or None.
+        try:
+            # Replace Infinity with 0
+            df.replace([float('inf'), float('-inf')], 0, inplace=True)
+            # Replace NaN (Nulls) with 0 (or use None if you prefer strict nulls)
+            df.fillna(0, inplace=True)
+        except Exception as cleanup_err:
+            print(f"⚠️ Data Cleanup Warning: {cleanup_err}")
+        # --------------------------------------------
+
         plotly_code = await vn.generate_plotly_code_async(user_msg, final_sql, df)
         table_data = df.head(100).to_dict(orient='records')
         visual_type = "table"
