@@ -12,14 +12,15 @@ pandas
 python-multipart
 psycopg2-binary
 
-# --- VANNA & VECTORS ---
+# --- VANNA ---
 vanna==0.7.5
-# CRITICAL FIX: Force newer ChromaDB to support Pydantic 2.x
 chromadb>=0.4.22
 plotly>=5.0.0
 kaleido
 
-# --- SECURITY ---
-passlib[bcrypt]==1.7.4
-# CRITICAL FIX: Remove pinned bcrypt==3.2.2 so it can update to 4.x
+# --- SECURITY (Fixed) ---
+# Switch to Argon2 to avoid Bcrypt/ChromaDB conflicts
+passlib[argon2]
+argon2-cffi
 python-jose[cryptography]
+# Removed bcrypt explicit pin as it is managed by chromadb

@@ -1,16 +1,17 @@
-# app/services/auth.py
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from app.db.app_models import SessionLocal, User
+from app.db.app_models import SessionLocal, User, engine # Ensure engine is imported to force table creation
 
 # CONFIG
-SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING_R"
+SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 Hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# --- FIX: USE ARGON2 INSTEAD OF BCRYPT ---
+# 'argon2' is modern, secure, and doesn't conflict with ChromaDB's bcrypt version.
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
