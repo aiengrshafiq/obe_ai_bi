@@ -307,3 +307,9 @@ async def knowledge_base(request: Request):
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Serves the Login HTML page"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
