@@ -300,7 +300,7 @@ async def view_logs(
     })
 
 @router.get("/admin/knowledge_base", response_class=HTMLResponse)
-async def register_page(request: Request):
+async def knowledge_base(request: Request):
     return templates.TemplateResponse("knowledge_base.html", {"request": request})
 
 
