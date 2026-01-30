@@ -18,6 +18,6 @@ chromadb>=0.4.0
 plotly>=5.0.0
 kaleido
 
-passlib[bcrypt]   # Password hashing
-python-jose[cryptography]  # JWT Tokens
-sqlalchemy
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-jose[cryptography]
