@@ -168,13 +168,27 @@ async def chat_endpoint(
                 "visual_type": "none"
             }
 
+        # --- THE FIX: DETERMINISTIC REPLACEMENT ---
+        # If the AI was lazy and returned the placeholder '{latest_ds}' 
+        # instead of the value, we fix it here manually.
+        
+        # 1. Fix partition ds
+        final_sql = ai_response.replace("{latest_ds}", latest_ds)
+        
+        # 2. Fix dashed dates (used in User Cube for NRU)
+        latest_ds_dash = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
+        final_sql = final_sql.replace("{latest_ds_dash}", latest_ds_dash)
+        
+        # 3. Fix today's date placeholder if it exists
+        final_sql = final_sql.replace("{today_iso}", today_iso)
+        # ------------------------------------------
         # Log Generated SQL
-        log_entry.generated_sql = ai_response
+        log_entry.generated_sql = final_sql
         db.commit()
 
         # 3. Execute SQL
         # This uses the Synchronous Engine via our wrapper
-        df = await vn.run_sql_async(ai_response)
+        df = await vn.run_sql_async(final_sql)
 
         # Log Success
         log_entry.execution_success = True
@@ -185,12 +199,12 @@ async def chat_endpoint(
             return {
                 "type": "success",
                 "thought": "Query executed successfully but returned no data.",
-                "sql": ai_response,
+                "sql": final_sql,
                 "data": [],
                 "visual_type": "none"
             }
 
-        plotly_code = await vn.generate_plotly_code_async(user_msg, ai_response, df)
+        plotly_code = await vn.generate_plotly_code_async(user_msg, final_sql, df)
         table_data = df.head(100).to_dict(orient='records')
         visual_type = "table"
         if len(df) > 1 and len(df.columns) >= 2: visual_type = "plotly"
@@ -198,7 +212,7 @@ async def chat_endpoint(
         return {
             "type": "success",
             "thought": f"Generated SQL based on logic for ds='{latest_ds}'",
-            "sql": ai_response,
+            "sql": final_sql,
             "data": table_data,
             "visual_type": visual_type,
             "plotly_code": plotly_code # This is the Python code string
