@@ -3,41 +3,41 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, create_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from app.core.config import settings
 
-# Local SQLite DB for Application State (Users, Logs)
-APP_DB_URL = "sqlite:///./app_data.db"
+# 1. Connect to Hologres (Sync Driver)
+APP_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
+engine = create_engine(APP_DB_URL, pool_pre_ping=True)
 
-engine = create_engine(APP_DB_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 1. User Table
+# 2. Define Models in the 'ai_pilot' Schema
 class User(Base):
     __tablename__ = "users"
+    # This tells SQLAlchemy the table lives in the 'ai_pilot' schema
+    __table_args__ = {"schema": "ai_pilot"}
+    
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
-    role = Column(String, default="user") # 'admin' or 'user'
+    role = Column(String, default="user")
 
-# 2. Audit Log (The "Black Box" Recorder)
 class ChatLog(Base):
     __tablename__ = "chat_logs"
+    # This tells SQLAlchemy the table lives in the 'ai_pilot' schema
+    __table_args__ = {"schema": "ai_pilot"}
+    
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
     username = Column(String)
-    
-    # Context
     user_question = Column(Text)
-    context_provided = Column(Text) # What 'history' or 'date' we sent to AI
-    
-    # AI Performance
+    context_provided = Column(Text)
     generated_sql = Column(Text)
     error_message = Column(Text, nullable=True)
     execution_success = Column(Boolean, default=False)
-    
-    # Classification
-    cube_used = Column(String, nullable=True) # Which table did it pick?
+    cube_used = Column(String, nullable=True)
 
-# Create Tables
-Base.metadata.create_all(bind=engine)
+# Note: We skip 'Base.metadata.create_all' here because we ran the DDL manually.
+# This prevents permission errors on startup.
