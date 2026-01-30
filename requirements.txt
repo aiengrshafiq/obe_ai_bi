@@ -1,6 +1,6 @@
 fastapi==0.109.0
 uvicorn==0.27.0
-pydantic==2.6.0
+pydantic>=2.6.0
 python-dotenv==1.0.1
 sqlalchemy==2.0.25
 asyncpg==0.29.0
@@ -12,12 +12,14 @@ pandas
 python-multipart
 psycopg2-binary
 
-# --- FIX: PIN TO STABLE VERSION ---
+# --- VANNA & VECTORS ---
 vanna==0.7.5
-chromadb>=0.4.0
+# CRITICAL FIX: Force newer ChromaDB to support Pydantic 2.x
+chromadb>=0.4.22
 plotly>=5.0.0
 kaleido
 
+# --- SECURITY ---
 passlib[bcrypt]==1.7.4
-bcrypt==3.2.2
+# CRITICAL FIX: Remove pinned bcrypt==3.2.2 so it can update to 4.x
 python-jose[cryptography]
