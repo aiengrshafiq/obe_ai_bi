@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Knowledge Base</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans">
+
+    <div class="bg-white shadow p-4 flex justify-between items-center mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/" class="text-gray-500 hover:text-blue-600 flex items-center gap-1 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Back to App
+            </a>
+            <h1 class="text-xl font-bold text-gray-800">Knowledge Base</h1>
+        </div>
+    </div>
+
+    <div class="max-w-5xl mx-auto px-4">
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <table class="min-w-full leading-normal">
+                <thead>
+                    <tr>
+                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">
+                            Table Name
+                        </th>
+                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">
+                            Description
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm font-medium text-gray-900">
+                            public.user_profile_360
+                        </td>
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm text-gray-700">
+                            Daily snapshot of user profiles with registration dates, deposit/withdrawal volumes, active status flags, segments, and other user attributes
+                        </td>
+                    </tr>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm font-medium text-gray-900">
+                            public.dwd_activity_t_points_user_task_di
+                        </td>
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm text-gray-700">
+                            Points activity table tracking how users earn and spend points through various activities like check-ins, lucky spins, and referrals
+                        </td>
+                    </tr>
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm font-medium text-gray-900">
+                            public.dws_all_trades_di
+                        </td>
+                        <td class="px-5 py-4 border-b border-gray-200 text-sm text-gray-700">
+                            Complete trade records with details on order types, volumes, fees, and trade execution metrics
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</body>
+</html>

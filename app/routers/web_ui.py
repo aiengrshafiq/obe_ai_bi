@@ -299,6 +299,11 @@ async def view_logs(
         "username": username
     })
 
+@router.get("/admin/knowledge_base", response_class=HTMLResponse)
+async def register_page(request: Request):
+    return templates.TemplateResponse("knowledge_base.html", {"request": request})
+
+
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
