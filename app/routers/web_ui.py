@@ -1,5 +1,6 @@
 # app/routers/web_ui.py
 from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
