@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
+from sqlalchemy import desc
 import json
 import time
 
@@ -102,6 +103,7 @@ async def chat_endpoint(
     
     # 1. Inject Context (The "Intelligence" Layer)
     latest_ds = await get_current_ds()
+    today_iso = datetime.now().strftime("%Y-%m-%d") # Actual Calendar Date
 
 
     # 2. Build Contextual Prompt (The Fix for "Chain of Questions")
@@ -118,7 +120,9 @@ async def chat_endpoint(
     {history_context}
     
     CURRENT CONTEXT:
-    - Today's date partition is ds='{latest_ds}'.
+    - Today's Date is: {today_iso} (Use this for "yesterday", "last 7 days" calculations).
+    - The Latest Data Partition is: ds='{latest_ds}'.
+    - CRITICAL: Even if filtering by a date range (e.g. registration_date), you MUST ALSO filter by ds='{latest_ds}' to pick the latest snapshot row.
     - If the user asks about "users" or "they" without context, refer to the PREVIOUS SQL generated.
     - If the question is completely unrelated to data (e.g. "hi", "weather"), return SQL: SELECT 'Greeting' as msg
     
@@ -188,6 +192,7 @@ async def chat_endpoint(
             "visual_type": visual_type,
             "plotly_code": plotly_code # This is the Python code string
         }
+        
 
     except Exception as e:
         log_entry.error_message = str(e)
@@ -235,12 +240,37 @@ async def run_custom_sql_endpoint(payload: CustomSQLRequest):
     except Exception as e:
         return {"type": "error", "message": str(e)}
 
-# 4. Admin Log Viewer
-@router.get("/admin/logs")
-async def view_logs(request: Request, db = Depends(get_db)):
-    # Simple HTML table dump for debugging
-    logs = db.query(ChatLog).order_by(ChatLog.timestamp.desc()).limit(50).all()
-    return templates.TemplateResponse("admin_logs.html", {"request": request, "logs": logs})
+# --- 2. UPDATED ADMIN LOGS ENDPOINT (Pagination & Filter) ---
+@router.get("/admin/logs", response_class=HTMLResponse)
+async def view_logs(
+    request: Request, 
+    db = Depends(get_db), 
+    page: int = 1, 
+    username: str = ""
+):
+    page_size = 20
+    query = db.query(ChatLog)
+    
+    # Filter
+    if username:
+        query = query.filter(ChatLog.username.ilike(f"%{username}%"))
+    
+    # Sort & Paginate
+    total_records = query.count()
+    logs = query.order_by(desc(ChatLog.timestamp))\
+                .offset((page - 1) * page_size)\
+                .limit(page_size)\
+                .all()
+    
+    total_pages = (total_records + page_size - 1) // page_size
+    
+    return templates.TemplateResponse("admin_logs.html", {
+        "request": request, 
+        "logs": logs,
+        "page": page,
+        "total_pages": total_pages,
+        "username": username
+    })
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
