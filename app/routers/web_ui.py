@@ -130,6 +130,7 @@ async def chat_endpoint(
        Instead, reply exactly like this: "CLARIFICATION: <Your question to the user>"
     3. If the question is conversational (e.g., "Hello", "Thanks"), reply exactly like this: 
        "CLARIFICATION: Hello! I am your Data Copilot. Ask me about Users, Volume, or Points."
+    4. **User Code is STRING:** Always use quotes: `user_code = '12345'`. NEVER use numbers.
     
     NEW QUESTION: {user_msg}
     """
@@ -215,10 +216,37 @@ async def chat_endpoint(
             print(f"⚠️ Data Cleanup Warning: {cleanup_err}")
         # --------------------------------------------
 
-        plotly_code = await vn.generate_plotly_code_async(user_msg, final_sql, df)
+        
         table_data = df.head(100).to_dict(orient='records')
         visual_type = "table"
-        if len(df) > 1 and len(df.columns) >= 2: visual_type = "plotly"
+        plotly_code = ""
+
+        # Only generate a Chart if the data is AGGREGATED (Trends/Summaries)
+        # Heuristic: Check for keywords in the SQL
+        is_aggregated = any(k in final_sql.upper() for k in ["GROUP BY", "SUM(", "COUNT(", "AVG("])
+        
+        # Or if it's explicitly a small summary dataset (e.g., < 50 rows but multiple columns)
+        is_small_summary = len(df) < 50 and len(df) > 1 and len(df.columns) >= 2
+
+        if is_aggregated or is_small_summary:
+            visual_type = "plotly"
+            
+            # --- BETTER CHART PROMPT ---
+            # We tell the AI to format the chart specifically for Finance
+            chart_instructions = (
+                f"Visualize this data using Plotly Graph Objects. "
+                f"User Question: '{user_msg}'. "
+                f"IMPORTANT: "
+                f"1. If the x-axis is a date, format tick labels as '%Y-%m-%d'. "
+                f"2. If showing Volume or Amount, use a Bar Chart. "
+                f"3. Do NOT connect individual transaction dots with a line. "
+                f"4. Make the title descriptive."
+            )
+            
+            # We pass these instructions as the 'question' to the plotter
+            plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
+
+
 
         return {
             "type": "success",

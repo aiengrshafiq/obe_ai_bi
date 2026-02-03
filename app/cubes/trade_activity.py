@@ -37,7 +37,7 @@ DOCS = """
 **Table Purpose:**
 Records every trade execution. Key source for Volume, Revenue, and User Behavior.
 
-**Critical Rules:**
+**Critical Data Types & Rules:**
 1. **Status Filtering:** ALWAYS use `_desc` columns. 
    - Cancelled Orders: `order_status_desc = 'cancel'`
    - Filled Orders: `order_status_desc = 'full'` or `order_status_desc = 'filled'`
@@ -48,6 +48,10 @@ Records every trade execution. Key source for Volume, Revenue, and User Behavior
    - **Sell Volume:** Sum `deal_amount` where `order_side_desc = 'sell'`.
    - **Trade Duration:** Use `duration_seconds` to find outliers or average hold time.
 4. **Time Analysis:** Use `EXTRACT(HOUR FROM trade_datetime)` for hourly analysis.
+5. **User Code is a STRING:** ALWAYS wrap `user_code` in single quotes.
+   - CORRRCT: `WHERE user_code = '10034920'`
+   - WRONG: `WHERE user_code = 10034920` (This will fail).
+6. **Partition:** Always filter by `ds = '{latest_ds}'` unless analyzing history.
 """
 
 # 3. Training Examples (BI Team's Complex Queries - Adapted)
