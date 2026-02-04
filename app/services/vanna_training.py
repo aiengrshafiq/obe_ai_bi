@@ -3,6 +3,8 @@ import app.cubes.user_profile as user_cube
 import app.cubes.trade_activity as trade_cube
 import app.cubes.points_system as points_cube
 import app.cubes.transaction_detail as trans_cube
+import app.cubes.login_history as login_cube
+import app.cubes.device_log as device_cube
 
 async def train_vanna_on_startup(force_retrain: bool = False):
     print("⚡ Checking Vanna Knowledge Base...")
@@ -50,5 +52,22 @@ async def train_vanna_on_startup(force_retrain: bool = False):
     for ex in trans_cube.EXAMPLES:
         vn.train(question=ex['question'], sql=ex['sql'])
     # ---------------------------------------
+
+    # --- 5. TRAIN LOGIN HISTORY CUBE (NEW) ---
+    print(f"   -> Training {login_cube.NAME}...")
+    vn.train(ddl=login_cube.DDL)
+    vn.train(documentation=login_cube.DOCS)
+    for ex in login_cube.EXAMPLES:
+        vn.train(question=ex['question'], sql=ex['sql'])
+    # -----------------------------------------
+
+    # --- 6. TRAIN DEVICE LOG CUBE (NEW) ---
+    print(f"   -> Training {device_cube.NAME}...")
+    vn.train(ddl=device_cube.DDL)
+    vn.train(documentation=device_cube.DOCS)
+    for ex in device_cube.EXAMPLES:
+        vn.train(question=ex['question'], sql=ex['sql'])
+    # --------------------------------------
+
 
     print("✅ Auto-Training Complete!")

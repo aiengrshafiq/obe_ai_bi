@@ -27,7 +27,7 @@ setup_vanna_db_connection()
 # 4. Register Startup Event (Auto-Train)
 @app.on_event("startup")
 async def startup_event():
-    await train_vanna_on_startup(force_retrain=False)
+    await train_vanna_on_startup(force_retrain=True)
 
 # 5. CORS (Keep this)
 app.add_middleware(
