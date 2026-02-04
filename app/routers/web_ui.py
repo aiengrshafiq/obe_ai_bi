@@ -1,4 +1,6 @@
 # app/routers/web_ui.py
+import json
+import time
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -8,8 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy import desc
-import json
-import time
+
 
 # Internal imports
 from app.services.vanna_wrapper import vn
@@ -20,6 +21,11 @@ from app.services.auth import verify_token, get_password_hash, verify_password, 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+# --- 1. SIMPLE CACHE FOR DATE PARTITION ---
+# This prevents hitting the DB on every request.
+_DS_CACHE = {"value": None, "expires": 0}
 
 # --- Dependency: Get DB Session ---
 def get_db():
@@ -77,20 +83,28 @@ async def get_chat_ui(request: Request):
 
 # --- HELPER: Get Latest Partition ---
 async def get_current_ds() -> str:
-    """
-    Checks the DB for the latest partition. 
-    Crucial for the 'Yesterday Rule'.
-    """
+    current_time = time.time()
+    
+    # Return cached value if valid (TTL: 1 hour)
+    if _DS_CACHE["value"] and current_time < _DS_CACHE["expires"]:
+        return _DS_CACHE["value"]
+
     try:
-        # We use the raw async executor for speed
+        # DB Hit
         sql = "SELECT max(ds) as max_ds FROM public.user_profile_360"
         result = await execute_raw_sql(sql)
         if result and result[0]['max_ds']:
-            return result[0]['max_ds']
+            new_ds = result[0]['max_ds']
+            # Update Cache (Expires in 3600 seconds = 1 hour)
+            _DS_CACHE["value"] = new_ds
+            _DS_CACHE["expires"] = current_time + 3600
+            print(f"🔄 Refreshed Partition Cache: {new_ds}")
+            return new_ds
+            
     except Exception as e:
         print(f"⚠️ Partition Check Failed: {e}")
     
-    # Fallback to yesterday
+    # Fallback
     return (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
 
 @router.post("/api/chat")
@@ -182,6 +196,15 @@ async def chat_endpoint(
         
         # 3. Fix today's date placeholder if it exists
         final_sql = final_sql.replace("{today_iso}", today_iso)
+
+        # 4. FORCE ROW LIMIT (The Safety Brake)
+        # If the query is a SELECT and doesn't have a LIMIT, we add one.
+        # We use a simple check to avoid breaking complex subqueries, 
+        # but for top-level generation, this catches 99% of "Select All" risks.
+        if "LIMIT" not in final_sql.upper() and "SELECT" in final_sql.upper():
+            # Remove trailing semicolon if present
+            final_sql = final_sql.strip().rstrip(';')
+            final_sql += " LIMIT 100;"
         # ------------------------------------------
         # Log Generated SQL
         log_entry.generated_sql = final_sql
@@ -259,9 +282,23 @@ async def chat_endpoint(
         
 
     except Exception as e:
-        log_entry.error_message = str(e)
+        # Log the full error internally for you
+        error_msg = str(e)
+        print(f"❌ Internal Error: {error_msg}")
+        
+        log_entry.error_message = error_msg
         db.commit()
-        return {"type": "error", "message": str(e)}
+        
+        # Sanitize for User
+        user_friendly_msg = "An internal error occurred while processing your request."
+        
+        # Pass through specific useful errors (like your Guardrail blocks)
+        if "Security Alert" in error_msg:
+            user_friendly_msg = error_msg
+        elif "No data found" in error_msg:
+             user_friendly_msg = "I couldn't find any data matching that request."
+
+        return {"type": "error", "message": user_friendly_msg}
 
 
 
