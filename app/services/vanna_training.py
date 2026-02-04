@@ -5,6 +5,7 @@ import app.cubes.points_system as points_cube
 import app.cubes.transaction_detail as trans_cube
 import app.cubes.login_history as login_cube
 import app.cubes.device_log as device_cube
+import app.cubes.referral_performance as referral_cube
 
 async def train_vanna_on_startup(force_retrain: bool = False):
     print("⚡ Checking Vanna Knowledge Base...")
@@ -68,6 +69,15 @@ async def train_vanna_on_startup(force_retrain: bool = False):
     for ex in device_cube.EXAMPLES:
         vn.train(question=ex['question'], sql=ex['sql'])
     # --------------------------------------
+
+    # --- 7. TRAIN REFERRAL CUBE (NEW) ---
+    print(f"   -> Training {referral_cube.NAME}...")
+    vn.train(ddl=referral_cube.DDL)
+    vn.train(documentation=referral_cube.DOCS)
+    for ex in referral_cube.EXAMPLES:
+        vn.train(question=ex['question'], sql=ex['sql'])
+    # ------------------------------------
+    
 
 
     print("✅ Auto-Training Complete!")
