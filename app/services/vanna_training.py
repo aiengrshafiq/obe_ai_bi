@@ -6,6 +6,7 @@ import app.cubes.transaction_detail as trans_cube
 import app.cubes.login_history as login_cube
 import app.cubes.device_log as device_cube
 import app.cubes.referral_performance as referral_cube
+import app.cubes.risk_blacklist as risk_cube
 
 async def train_vanna_on_startup(force_retrain: bool = False):
     print("⚡ Checking Vanna Knowledge Base...")
@@ -78,6 +79,13 @@ async def train_vanna_on_startup(force_retrain: bool = False):
         vn.train(question=ex['question'], sql=ex['sql'])
     # ------------------------------------
     
+    # --- 8. TRAIN RISK BLACKLIST CUBE (NEW) ---
+    print(f"   -> Training {risk_cube.NAME}...")
+    vn.train(ddl=risk_cube.DDL)
+    vn.train(documentation=risk_cube.DOCS)
+    for ex in risk_cube.EXAMPLES:
+        vn.train(question=ex['question'], sql=ex['sql'])
+    # ------------------------------------------
 
 
     print("✅ Auto-Training Complete!")
