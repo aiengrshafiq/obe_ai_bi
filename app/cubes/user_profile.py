@@ -100,5 +100,47 @@ EXAMPLES = [
     {
         "question": "Count FTD users for Jan 1st 2026.",
         "sql": "SELECT COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND DATE(first_deposit_date) = '2026-01-01';"
+    },
+    # CASE 2: Population Ratios (Single Row)
+    {
+        "question": "How many users we have? Show ratio of deposit, trade and withdraw.",
+        "sql": """
+        SELECT 
+            COUNT(user_code) as total_users,
+            ROUND(COUNT(CASE WHEN first_deposit_date IS NOT NULL THEN 1 END) * 100.0 / COUNT(user_code), 2) as deposit_ratio,
+            ROUND(COUNT(CASE WHEN is_active_trader_7d = 1 THEN 1 END) * 100.0 / COUNT(user_code), 2) as active_trader_ratio,
+            ROUND(SUM(CASE WHEN total_withdraw_volume > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(user_code), 2) as withdraw_ratio
+        FROM public.user_profile_360 
+        WHERE ds = '{latest_ds}';
+        """
+    },
+
+    # CASE 3: DAU (Yesterday) & MAU (Monthly)
+    # Strategy: Scan the whole month for MAU to get true unique counts
+    {
+        "question": "What is DAU for yesterday and MAU for January 2026?",
+        "sql": """
+        SELECT 
+            (SELECT COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND is_active_user_7d = 1) as DAU_Yesterday,
+            (SELECT COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE ds BETWEEN '20260101' AND '20260131' AND is_active_user_7d = 1) as MAU_January
+        """
+    },
+
+    # CASE 4: User Acquisition Funnel (Long Format for Charting)
+    # Strategy: Use UNION ALL to create a format Plotly understands easily
+    {
+        "question": "Generate a user acquisition funnel for the past week.",
+        "sql": """
+        SELECT '1_Browsing' as stage, COUNT(DISTINCT user_code) as user_count FROM public.dwd_user_device_log_di WHERE ds >= '{latest_ds}'::DATE - INTERVAL '7 days'
+        UNION ALL
+        SELECT '2_Registration', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE registration_date >= NOW() - INTERVAL '7 days' AND ds = '{latest_ds}'
+        UNION ALL
+        SELECT '3_Login', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE is_active_user_7d = 1 AND ds = '{latest_ds}'
+        UNION ALL
+        SELECT '4_Deposit', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE first_deposit_date >= NOW() - INTERVAL '7 days' AND ds = '{latest_ds}'
+        UNION ALL
+        SELECT '5_Trading', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE is_active_trader_7d = 1 AND ds = '{latest_ds}'
+        ORDER BY stage;
+        """
     }
 ]

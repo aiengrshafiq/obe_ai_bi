@@ -113,7 +113,7 @@ async def chat_endpoint(
     current_user: User = Depends(get_current_user), # Secured
     db = Depends(get_db)
 ):
-    user_msg = payload.message
+    user_msg = payload.message.strip()
     
     # 1. Inject Context (The "Intelligence" Layer)
     latest_ds = await get_current_ds()
@@ -134,9 +134,10 @@ async def chat_endpoint(
     {history_context}
     
     CURRENT CONTEXT:
+    - You are the Data Analyst for **OneBullEx (OBE)**. All questions refer to this crypto exchange.
     - Today's Date is: {today_iso} (Use this for "yesterday", "last 7 days").
-    - The Latest Data Partition is: ds='{latest_ds}'.
-    - CRITICAL: Always filter by ds='{latest_ds}' for snapshots.
+    - Latest Snapshot Partition: ds='{latest_ds}'.
+    
     
     CRITICAL INSTRUCTIONS:
     1. If the question is clear and related to data, generate the SQL.
@@ -145,10 +146,22 @@ async def chat_endpoint(
     3. If the question is conversational (e.g., "Hello", "Thanks"), reply exactly like this: 
        "CLARIFICATION: Hello! I am your Data Copilot. Ask me about Users, Volume, or Points."
     4. **User Code is STRING:** Always use quotes: `user_code = '12345'`. NEVER use numbers.
+    5. **Identity:** If user asks about "OneBullEx", "OBE", or "Platform", query the data normally. Do NOT ask for clarification.
+    6. **Granularity:** We generally track data by **Day** (Daily Partition). If user asks for "Hourly" or "Minute-by-minute" trends (e.g. "last 12 hours"), reply: 
+       "CLARIFICATION: Our data is updated daily. I can show you the trend for the last few days instead."
     
+
+    CRITICAL SQL RULES:
+    1. **Snapshots:** For "Current Status" (e.g. "total users", "balance"), YOU MUST filter by `ds='{latest_ds}'`.
+    2. **History/Trends:** If user asks for "Trend", "History", "Last Month", or "MAU", you MAY filter by a date range (e.g. `ds BETWEEN ...`).
+    3. **Funnels:** Use `UNION ALL` to stack stages vertically.
+    4. **Formatting:** `user_code` is STRING (use quotes).
+
     NEW QUESTION: {user_msg}
     """
     
+
+
     print(f"🤖 {current_user.username} is asking: {user_msg}")
 
     # 3. Initialize Log
@@ -244,41 +257,73 @@ async def chat_endpoint(
         visual_type = "table"
         plotly_code = ""
 
-        # Only generate a Chart if the data is AGGREGATED (Trends/Summaries)
-        # Heuristic: Check for keywords in the SQL
-        is_aggregated = any(k in final_sql.upper() for k in ["GROUP BY", "SUM(", "COUNT(", "AVG("])
+        # Logic Config
+        row_count = len(df)
+        col_count = len(df.columns)
+        user_lower = user_msg.lower()
+        is_funnel = "funnel" in user_lower or "stage" in df.columns or "step" in df.columns
         
-        # Or if it's explicitly a small summary dataset (e.g., < 50 rows but multiple columns)
-        is_small_summary = len(df) < 50 and len(df) > 1 and len(df.columns) >= 2
+        # Detect Forced Format
+        force_table = "table" in user_lower
+        force_chart = any(x in user_lower for x in ["chart", "graph", "plot", "trend", "visualize"])
+        
+        thought_msg = f"Generated SQL based on logic for ds='{latest_ds}'"
 
-        if is_aggregated or is_small_summary:
+        # Decision Tree
+        if row_count == 0:
+            visual_type = "none"
+        
+        # 1. Forced Table
+        elif force_table:
+            visual_type = "table"
+            thought_msg += " (User requested Table view)"
+
+        # 2. Forced Chart
+        elif force_chart:
+            # Check feasibility
+            if row_count == 1 and col_count < 2:
+                # Impossible to chart a single scalar value (e.g., just "100")
+                visual_type = "table"
+                thought_msg += " (User requested Chart, but data is a single number. Showing Table instead.)"
+            else:
+                visual_type = "plotly"
+                # Generic instruction for forced chart
+                chart_instructions = f"Visualize this data as a chart. User Question: '{user_msg}'"
+                plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
+
+        # 3. Auto-Detect Funnel
+        elif is_funnel:
             visual_type = "plotly"
-            
-            # --- BETTER CHART PROMPT ---
-            # We tell the AI to format the chart specifically for Finance
-            chart_instructions = (
-                f"Visualize this data using Plotly Graph Objects. "
-                f"User Question: '{user_msg}'. "
-                f"IMPORTANT: "
-                f"1. If the x-axis is a date, format tick labels as '%Y-%m-%d'. "
-                f"2. If showing Volume or Amount, use a Bar Chart. "
-                f"3. Do NOT connect individual transaction dots with a line. "
-                f"4. Make the title descriptive."
-            )
-            
-            # We pass these instructions as the 'question' to the plotter
+            chart_instructions = "Create a Funnel Chart. Use the text column for stages and numeric column for values."
             plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
 
+        # 4. Auto-Detect Single Row (Show Table)
+        elif row_count == 1:
+            visual_type = "table" 
 
+        # 5. Auto-Detect Standard Chart
+        elif row_count > 1 and col_count >= 2:
+            visual_type = "plotly"
+            chart_instructions = (
+                f"Visualize this data. "
+                f"User Question: '{user_msg}'. "
+                f"Rules: "
+                f"1. If multiple metric columns exist (e.g. deposit, trade), use a Grouped Bar Chart. "
+                f"2. If x-axis is date, format as '%Y-%m-%d'. "
+                f"3. Make the title descriptive."
+            )
+            plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
 
         return {
             "type": "success",
-            "thought": f"Generated SQL based on logic for ds='{latest_ds}'",
+            "thought": thought_msg,
             "sql": final_sql,
             "data": table_data,
             "visual_type": visual_type,
-            "plotly_code": plotly_code # This is the Python code string
+            "plotly_code": plotly_code
         }
+
+
         
 
     except Exception as e:
