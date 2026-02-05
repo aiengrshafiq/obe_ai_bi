@@ -147,9 +147,9 @@ async def chat_endpoint(
        "CLARIFICATION: Hello! I am your Data Copilot. Ask me about Users, Volume, or Points."
     4. **User Code is STRING:** Always use quotes: `user_code = '12345'`. NEVER use numbers.
     5. **Identity:** If user asks about "OneBullEx", "OBE", or "Platform", query the data normally. Do NOT ask for clarification.
-    6. **Granularity:** We generally track data by **Day** (Daily Partition). If user asks for "Hourly" or "Minute-by-minute" trends (e.g. "last 12 hours"), reply: 
-       "CLARIFICATION: Our data is updated daily. I can show you the trend for the last few days instead."
-    
+    6. **Granularity:** If user asks for "Hourly" or "Last X hours", check if the table has a timestamp column (like `create_at`). 
+       - If YES: Generate SQL using `HOUR(create_at)` or `NOW() - INTERVAL 'X hours'`. 
+       - If NO: Generate SQL for the daily trend instead using `ds`.
 
     CRITICAL SQL RULES:
     1. **Snapshots:** For "Current Status" (e.g. "total users", "balance"), YOU MUST filter by `ds='{latest_ds}'`.
