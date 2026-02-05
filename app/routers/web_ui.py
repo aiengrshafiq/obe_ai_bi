@@ -261,6 +261,7 @@ async def chat_endpoint(
         row_count = len(df)
         col_count = len(df.columns)
         user_lower = user_msg.lower()
+        sql_upper = final_sql.upper()
         is_funnel = "funnel" in user_lower or "stage" in df.columns or "step" in df.columns
         
         # Detect Forced Format
