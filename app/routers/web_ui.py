@@ -264,55 +264,63 @@ async def chat_endpoint(
         is_funnel = "funnel" in user_lower or "stage" in df.columns or "step" in df.columns
         
         # Detect Forced Format
-        force_table = "table" in user_lower
+        force_table = any(x in user_lower for x in ["table", "list", "records", "details", "sample"])
         force_chart = any(x in user_lower for x in ["chart", "graph", "plot", "trend", "visualize"])
+        # 3. Detect SQL Semantics (Is it Analytical?)
+        # Analytical Queries usually have GROUP BY or Aggregates (SUM, COUNT, AVG)
+        has_aggregates = any(x in sql_upper for x in ["GROUP BY", "SUM(", "COUNT(", "AVG(", "MIN(", "MAX("])
         
+        # A raw select is usually "SELECT * FROM..." or "SELECT col1, col2..." without math
+        is_raw_select = ("SELECT *" in sql_upper) or (not has_aggregates)
+
         thought_msg = f"Generated SQL based on logic for ds='{latest_ds}'"
 
-        # Decision Tree
+        # --- DECISION TREE ---
+
         if row_count == 0:
             visual_type = "none"
-        
-        # 1. Forced Table
-        elif force_table:
-            visual_type = "table"
-            thought_msg += " (User requested Table view)"
 
-        # 2. Forced Chart
-        elif force_chart:
-            # Check feasibility
-            if row_count == 1 and col_count < 2:
-                # Impossible to chart a single scalar value (e.g., just "100")
-                visual_type = "table"
-                thought_msg += " (User requested Chart, but data is a single number. Showing Table instead.)"
-            else:
-                visual_type = "plotly"
-                # Generic instruction for forced chart
-                chart_instructions = f"Visualize this data as a chart. User Question: '{user_msg}'"
-                plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
-
-        # 3. Auto-Detect Funnel
+        # A. Funnels
         elif is_funnel:
             visual_type = "plotly"
             chart_instructions = "Create a Funnel Chart. Use the text column for stages and numeric column for values."
             plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
 
-        # 4. Auto-Detect Single Row (Show Table)
-        elif row_count == 1:
-            visual_type = "table" 
+        # B. Raw Data / Forced Table (Fixes "Show Random Records")
+        # If user asks for records OR the SQL is just a raw SELECT -> Show Table
+        elif force_table or (is_raw_select and not force_chart):
+            visual_type = "table"
+            thought_msg += " (Showing Table: Detected raw data query or user request)"
 
-        # 5. Auto-Detect Standard Chart
-        elif row_count > 1 and col_count >= 2:
+        # C. User Forced Chart
+        elif force_chart:
+            if row_count == 1 and col_count < 2:
+                visual_type = "table"
+                thought_msg += " (User requested Chart, but data is insufficient. Showing Table.)"
+            else:
+                visual_type = "plotly"
+                plotly_code = await vn.generate_plotly_code_async(f"Visualize this data. Question: {user_msg}", final_sql, df)
+
+        # D. Single Row Result -> Always Table
+        elif row_count == 1:
+            visual_type = "table"
+
+        # E. Analytical Data (Grouped/Aggregated) -> Chart
+        elif has_aggregates and row_count > 1:
             visual_type = "plotly"
             chart_instructions = (
                 f"Visualize this data. "
                 f"User Question: '{user_msg}'. "
                 f"Rules: "
-                f"1. If multiple metric columns exist (e.g. deposit, trade), use a Grouped Bar Chart. "
-                f"2. If x-axis is date, format as '%Y-%m-%d'. "
-                f"3. Make the title descriptive."
+                f"1. If multiple metrics (e.g. deposit, trade), use Grouped Bar. "
+                f"2. Format date x-axis as '%Y-%m-%d'. "
+                f"3. Descriptive title."
             )
             plotly_code = await vn.generate_plotly_code_async(chart_instructions, final_sql, df)
+
+        # F. Fallback -> Table
+        else:
+            visual_type = "table"
 
         return {
             "type": "success",
