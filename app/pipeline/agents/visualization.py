@@ -62,9 +62,15 @@ class VisualizationAgent:
         if has_aggregates and row_count > 1:
             instructions = (
                 f"Visualize this data. Question: '{user_question}'. "
-                f"Rules: 1. If date x-axis, format '%Y-%m-%d'. "
-                f"2. Use Grouped Bar for multiple metrics. "
-                f"3. Descriptive Title."
+                f"CRITICAL PRE-PROCESSING: "
+                f"1. If the dataframe has a column 'ds' (YYYYMMDD string), convert it first: "
+                f"   df['ds'] = pd.to_datetime(df['ds'].astype(str), format='%Y%m%d') "
+                f"2. Sort the dataframe by date. "
+                f"VISUALIZATION RULES: "
+                f"1. Use Grouped Bar for multiple metrics. "
+                f"2. Use Line Chart for single metric trends. "
+                f"3. X-axis tick format: '%Y-%m-%d'. "
+                f"4. Assign the figure to variable 'fig'."
             )
             code = await vn.generate_plotly_code_async(instructions, sql, df)
             fig_json = VisualizationAgent._execute_plotly_code(code, df)
@@ -80,7 +86,7 @@ class VisualizationAgent:
         """
         try:
             # Create a localized environment
-            local_vars = {"df": df, "go": go, "px": px}
+            local_vars = {"df": df, "go": go, "px": px, "pd": pd}
             
             # Execute the string code
             exec(code, {}, local_vars)
