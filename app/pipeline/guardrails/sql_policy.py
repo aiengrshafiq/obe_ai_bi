@@ -51,21 +51,17 @@ class SQLGuard:
 
         # 3. Enforce Row Limits (The "Cost" Guard)
         # We check if there is a 'limit' expression in the query
-        has_limit = parsed.args.get("limit") is not None
+        limit_node = parsed.args.get("limit")
         
-        if not has_limit:
-            # Inject LIMIT 100
-            # Note: We apply this to the outer-most query only
-            parsed.set("limit", exp.Limit(this=exp.Literal.number(100)))
-        
-        # 4. Enforce Cross-Join Ban (Optimization Guard)
-        # (Optional: Can be relaxed if you have specific needs)
-        for join in parsed.find_all(exp.Join):
-            if join.kind == "CROSS":
-                # Only allow if it's explicitly UNNEST or safe expansion
-                # For now, we block generic cross joins
-                pass 
-                # raise SQLPolicyException("Performance Alert: Cross Joins are risky.")
+        if not limit_node:
+            # .limit() returns a new expression with the limit applied
+            parsed = parsed.limit(100)
+        else:
+            # Optional: If limit exists but is too high (e.g. 1,000,000), cap it
+            # current_limit = int(limit_node.expression.this)
+            # if current_limit > 1000:
+            #     parsed = parsed.limit(1000)
+            pass
 
         return parsed.sql()
 
