@@ -1,48 +1,73 @@
 # app/main.py
 import os
-from fastapi import FastAPI, Request
+import uvicorn
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.core.config import settings
 from app.routers import web_ui
-import uvicorn
-
-# Import Services
 from app.db.vanna_db import setup_vanna_db_connection
 from app.services.vanna_training import train_vanna_on_startup
 
-# 1. Initialize App & Templates
-app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+# --- 1. LIFESPAN MANAGER (The Modern Way) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application lifecycle.
+    Code before 'yield' runs on startup.
+    Code after 'yield' runs on shutdown.
+    """
+    print("🟢 System Starting Up...")
+    
+    # A. Setup Vanna Connection
+    try:
+        setup_vanna_db_connection()
+        print("✅ Vanna DB Connected")
+    except Exception as e:
+        print(f"❌ Critical Error: Could not connect to Vanna DB. {e}")
+        # In strict product mode, you might want to raise e here to stop deployment
+    
+    # B. Auto-Train Knowledge Base (Smart Training)
+    try:
+        await train_vanna_on_startup(force_retrain=False)
+    except Exception as e:
+        print(f"⚠️ Warning: Knowledge Base training failed. System will run with existing data. {e}")
+
+    yield
+    
+    print("🔴 System Shutting Down...")
+    # Clean up resources (e.g., close DB pools) here if needed later
+
+# --- 2. INITIALIZE APP ---
+app = FastAPI(
+    title=settings.PROJECT_NAME, 
+    version=settings.VERSION,
+    lifespan=lifespan # Inject the lifecycle manager
+)
+
+# --- 3. MOUNT STATIC & TEMPLATES ---
 templates = Jinja2Templates(directory="app/templates")
 
-# 2. Mount Static
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-if not os.path.exists(static_dir): os.makedirs(static_dir)
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# 3. Setup Vanna DB Connection (The Bridge)
-setup_vanna_db_connection()
-
-# 4. Register Startup Event (Auto-Train)
-@app.on_event("startup")
-async def startup_event():
-    await train_vanna_on_startup(force_retrain=False)
-
-# 5. CORS (Keep this)
+# --- 4. MIDDLEWARE (CORS) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"], # In strict production, replace "*" with specific domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- DELETED: AuthMiddleware (It was causing the loop) ---
-# The security is now handled inside web_ui.py routers.
-
-# 6. Include Router
+# --- 5. ROUTERS ---
 app.include_router(web_ui.router)
 
+# --- 6. ENTRY POINT ---
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -23,4 +23,5 @@ kaleido
 passlib[argon2]
 argon2-cffi
 python-jose[cryptography]
-# Removed bcrypt explicit pin as it is managed by chromadb
+
+sqlglot==20.0.0

@@ -3,134 +3,157 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OneBullex Intelligence</title>
+    <title>OneBullEx Intelligence</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up { animation: fadeIn 0.3s ease-out forwards; }
+        .fade-in-up { animation: fadeInUp 0.4s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+        /* Markdown Tables */
+        .prose table { font-size: 0.875rem; width: 100%; border-collapse: collapse; }
+        .prose th { background: #f1f5f9; padding: 8px; text-align: left; font-weight: 600; color: #475569; }
+        .prose td { border-bottom: 1px solid #e2e8f0; padding: 8px; color: #334155; }
     </style>
 </head>
-<body class="bg-gray-50 h-screen flex overflow-hidden">
+<body class="h-screen flex overflow-hidden">
 
-    <aside class="w-64 bg-slate-900 text-white hidden md:flex flex-col flex-shrink-0 transition-all duration-300">
-        <div class="p-6 border-b border-slate-800">
+    <div class="md:hidden fixed w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md">
+        <span class="font-bold text-lg text-blue-400">OneBullEx</span>
+        <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+    </div>
+
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-xl">
+        <div class="p-6 border-b border-slate-800 hidden md:block">
             <h1 class="text-xl font-bold tracking-tight text-blue-400">OneBullEx</h1>
             <p class="text-xs text-slate-400 mt-1">Enterprise Data Copilot</p>
         </div>
         
-        <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar">
-            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-slate-800 hover:bg-slate-700 text-white p-3 rounded-lg transition-colors border border-slate-700">
-                <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                <span class="font-medium text-sm">New Chat</span>
-            </button>
-            <div class="pt-6 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Suggested Queries</div>
-            <button onclick="fillInput('Show top 10 large deposits')" class="text-left w-full group flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 transition">
-                <span class="bg-slate-800 text-slate-400 group-hover:text-blue-400 w-6 h-6 flex items-center justify-center rounded text-xs">💰</span>
-                <span class="text-slate-300 text-sm group-hover:text-white">Top Deposits</span>
-            </button>
-            <button onclick="fillInput('Count trades by market type')" class="text-left w-full group flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-800 transition">
-                <span class="bg-slate-800 text-slate-400 group-hover:text-green-400 w-6 h-6 flex items-center justify-center rounded text-xs">📊</span>
-                <span class="text-slate-300 text-sm group-hover:text-white">Trade Counts</span>
-            </button>
-            <button onclick="location.href='/admin/logs'"
-                    class="w-full group flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
-                <span class="bg-slate-900 text-slate-400 group-hover:text-purple-400 w-6 h-6 flex items-center justify-center rounded">
-                    📜
-                </span>
-                <span class="text-slate-300 text-sm font-medium group-hover:text-white">
-                    System Logs
-                </span>
-            </button>
-            <button onclick="location.href='/admin/knowledge_base'"
-                    class="w-full group flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors border border-slate-700">
-                <span class="bg-slate-900 text-slate-400 group-hover:text-purple-400 w-6 h-6 flex items-center justify-center rounded">
-                    📚
-                </span>
-                <span class="text-slate-300 text-sm font-medium group-hover:text-white">
-                    Knowledge Base
-                </span>
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar pt-16 md:pt-4">
+            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-all shadow-md group">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                <span class="font-medium text-sm">New Analysis</span>
             </button>
 
+            <div class="pt-6 pb-2 text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Quick Queries</div>
+            
+            <button onclick="fillInput('Show top 10 large deposits')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
+                <span class="text-lg">💰</span>
+                <span class="text-sm">Large Deposits</span>
+            </button>
+            <button onclick="fillInput('User registration trend last 7 days')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
+                <span class="text-lg">📈</span>
+                <span class="text-sm">User Growth</span>
+            </button>
+            <button onclick="fillInput('Show fraud risk summary')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
+                <span class="text-lg">🛡️</span>
+                <span class="text-sm">Risk Analysis</span>
+            </button>
+
+            <div class="pt-6 pb-2 text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Tools</div>
+            <a href="/admin/logs" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <span class="text-sm">System Logs</span>
+            </a>
         </nav>
-        <div class="p-4 border-t border-slate-800 mt-auto">
+
+        <div class="p-4 border-t border-slate-800 bg-slate-900">
             <div class="flex items-center gap-3 mb-3">
-                <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold" id="user-avatar">U</div>
-                <div class="text-sm font-medium text-slate-300" id="username-display">User</div>
+                <div class="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shadow-lg" id="user-avatar">U</div>
+                <div class="text-sm font-medium text-white truncate" id="username-display">User</div>
             </div>
-            <button onclick="logout()" class="w-full text-xs text-red-400 hover:text-red-300 flex items-center gap-2">
+            <button onclick="logout()" class="w-full text-xs text-red-400 hover:text-red-300 hover:bg-slate-800 py-2 rounded flex items-center justify-center gap-2 transition-colors">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 Sign Out
             </button>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col relative bg-white h-full w-full">
-        <header class="h-16 flex-shrink-0 border-b border-gray-100 flex items-center justify-between px-6 bg-white z-10">
-            <div class="flex items-center gap-2">
-                <h2 class="text-lg font-semibold text-gray-800">OneBullEx Assistant</h2>
-                <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-100">BETA</span>
+    <main class="flex-1 flex flex-col relative w-full bg-white h-full">
+        <header class="hidden md:flex h-16 border-b border-gray-100 items-center justify-between px-8 bg-white/80 backdrop-blur z-10 sticky top-0">
+            <div class="flex items-center gap-3">
+                <h2 class="text-lg font-semibold text-slate-800">Intelligence Engine</h2>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 tracking-wide">BETA v2.0</span>
             </div>
-            <div class="text-xs text-gray-400 font-mono">Model: Qwen-3-Coder-Plus</div>
+            <div class="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                Connected: Data Warehouse (Live)
+            </div>
         </header>
 
-        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth">
-            <div class="flex space-x-4 max-w-3xl mx-auto">
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
-                <div class="bg-white border border-gray-100 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
-                    <h3 class="font-medium text-gray-900 mb-2">Hello! I'm connected to the Data Warehouse.</h3>
-                    <p class="text-sm text-gray-600">Ask me about User Profile, Trading Activity, Points System, Financial Audit, Login History, User Device, Partners (Referrals).</p>
+        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth pb-32">
+            <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up">
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-md mt-1">AI</div>
+                <div class="bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
+                    <h3 class="font-semibold text-gray-900 mb-2 text-lg">Ready to analyze.</h3>
+                    <p class="text-gray-600 leading-relaxed mb-4">I can query all data cubes including User Profiles, Trading Activity, Financial Audits, and Risk Logs.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <button onclick="fillInput('Show total trading volume by day for last week')" class="text-left text-sm p-3 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors text-gray-600 hover:text-blue-700">
+                            📈 Show daily volume trend
+                        </button>
+                        <button onclick="fillInput('List users with high risk score > 0.8')" class="text-left text-sm p-3 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors text-gray-600 hover:text-blue-700">
+                            🚨 Find high-risk users
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div id="scroll-anchor" class="h-32"></div> 
+            <div id="scroll-anchor"></div>
         </div>
 
-        <div class="absolute bottom-0 left-0 w-full bg-white/95 backdrop-blur border-t border-gray-100 p-4 pb-6 z-20">
-            <div class="max-w-3xl mx-auto relative">
-                <div class="relative shadow-lg rounded-2xl">
+        <div class="absolute bottom-0 left-0 w-full bg-white/90 backdrop-blur-md border-t border-gray-200 p-4 md:p-6 z-20">
+            <div class="max-w-4xl mx-auto relative group">
+                <div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl opacity-0 group-focus-within:opacity-10 transition-opacity duration-300 -m-1"></div>
+                <div class="relative flex items-center bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:shadow-lg focus-within:border-blue-500 transition-all">
                     <input type="text" id="user-input" 
-                        class="w-full bg-white border border-gray-200 text-gray-800 placeholder-gray-400 text-sm rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 block p-4 pr-14 transition-all" 
+                        class="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base rounded-2xl px-5 py-4 focus:outline-none" 
                         placeholder="Ask a question about your data..."
+                        autocomplete="off"
                         onkeypress="handleKeyPress(event)">
-                    <button onclick="sendMessage()" class="absolute right-2 top-2 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors duration-200 group">
-                        <svg class="w-5 h-5 transform group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                    <button onclick="sendMessage()" class="mr-2 p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all hover:scale-105 shadow-md disabled:opacity-50 disabled:hover:scale-100" id="send-btn">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
                     </button>
+                </div>
+                <div class="text-center mt-2">
+                    <p class="text-[10px] text-gray-400">AI can make mistakes. Verify critical financial data.</p>
                 </div>
             </div>
         </div>
     </main>
-    <script>
-    // Load Username on Startup
-    document.addEventListener('DOMContentLoaded', () => {
-        const user = localStorage.getItem('username');
-        if(user) {
-            document.getElementById('username-display').innerText = user;
-            document.getElementById('user-avatar').innerText = user.substring(0,2).toUpperCase();
-        } else {
-            // Redirect if no session (optional, serves as double check)
-            if(!localStorage.getItem('access_token')) window.location.href = "/login";
-        }
-    });
 
-    function logout() {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('username');
-        window.location.href = "/login";
-    }
-</script>
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 hidden z-30 md:hidden backdrop-blur-sm"></div>
+
     <script>
-        // Store conversation history in memory
+        // --- Session Management ---
+        const token = localStorage.getItem('access_token');
+        const username = localStorage.getItem('username');
+
+        if (!token) window.location.href = "/login";
+        
+        if (username) {
+            document.getElementById('username-display').innerText = username;
+            document.getElementById('user-avatar').innerText = username.substring(0,2).toUpperCase();
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "/login";
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+
+        // --- Chat Logic ---
         let chatHistory = [];
         window.queryResults = {};
-        
+
         function fillInput(text) {
             const input = document.getElementById('user-input');
             input.value = text;
@@ -142,383 +165,233 @@
         }
 
         async function sendMessage() {
-            const token = localStorage.getItem('access_token');
-            if (!token) {
-                window.location.href = "/login";
-                return;
-            }
             const input = document.getElementById('user-input');
-            const container = document.getElementById('chat-container');
-            const anchor = document.getElementById('scroll-anchor');
+            const btn = document.getElementById('send-btn');
             const text = input.value.trim();
             if (!text) return;
 
-            // 1. Add User Message
-            const userMsg = document.createElement('div');
-            userMsg.className = "flex justify-end space-x-4 max-w-3xl mx-auto animate-fade-in-up";
-            userMsg.innerHTML = `<div class="bg-blue-600 text-white px-5 py-3 rounded-2xl rounded-tr-none shadow-md max-w-xl text-sm leading-relaxed">${text}</div>`;
-            container.insertBefore(userMsg, anchor);
-            
+            // UI Updates
             input.value = '';
-            scrollToBottom();
-
-            // 2. Add Loading
-            const loadingId = 'loading-' + Date.now();
-            const loadingMsg = document.createElement('div');
-            loadingMsg.id = loadingId;
-            loadingMsg.className = "flex space-x-4 max-w-3xl mx-auto animate-fade-in-up";
-            loadingMsg.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
-                <div class="bg-white border border-gray-100 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
-                    <div class="flex space-x-1">
-                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
-                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                        <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                    </div>
-                    <span class="text-xs text-gray-400 font-medium">Generating SQL...</span>
-                </div>`;
-            container.insertBefore(loadingMsg, anchor);
-            scrollToBottom();
+            input.disabled = true;
+            btn.disabled = true;
+            
+            appendUserMessage(text);
+            const loadingId = appendLoader();
 
             try {
-                // SEND REQUEST
                 const res = await fetch('/api/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token
-                    },
-                    body: JSON.stringify({
-                        message: text,
-                        history: chatHistory 
-                    })
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ message: text, history: chatHistory })
                 });
 
-                // Handle 401 (Expired Token)
-                if (res.status === 401) {
-                    localStorage.removeItem('access_token');
-                    window.location.href = "/login";
-                    return;
-                }
+                if (res.status === 401) { logout(); return; }
 
                 const data = await res.json();
-                
                 document.getElementById(loadingId).remove();
 
-                // SAVE TO HISTORY (Client Side)
+                // Update History
                 chatHistory.push({ role: "user", content: text });
-                if (data.sql) {
-                    // It was a query
-                    chatHistory.push({ role: "assistant", content: data.sql });
-                } else if (data.type === 'text' && data.message) {
-                    // CRITICAL FIX: Save the Clarification/Text to history
-                    // This ensures the AI remembers it asked "By volume or count?"
-                    chatHistory.push({ role: "assistant", content: data.message });
-                }
-
-                if (chatHistory.length > 6) chatHistory = chatHistory.slice(-6);
-
-                // 3. Render Logic
-                let contentHTML = '';
+                if (data.sql) chatHistory.push({ role: "assistant", content: data.sql });
+                else if (data.message) chatHistory.push({ role: "assistant", content: data.message });
                 
-                if (data.type === 'error') {
-                    contentHTML = `<div class="text-red-600 font-medium text-sm">⚠️ ${data.message}</div>`;
+                if (chatHistory.length > 8) chatHistory = chatHistory.slice(-8);
 
-                } else if (data.type === 'text') {
-                    // --- NEW: HANDLE CLARIFICATION / TEXT RESPONSE ---
-                    contentHTML = `<div class="text-gray-800 text-sm leading-relaxed">${data.message}</div>`;
+                renderResponse(data);
 
-                } else {
-                    // --- 1. SAVE DATA FOR EXPORT ---
-                    const resultId = Date.now();
-                    if (data.data && data.data.length > 0) {
-                        window.queryResults[resultId] = data.data;
-                    }
-
-                    // Thought Process
-                    contentHTML += `<div class="text-xs text-gray-500 mb-2 italic">Thinking: ${data.thought}</div>`;
-                    
-                    // --- 2. HEADER: SQL + EXPORT BUTTON ---
-                    contentHTML += `
-                        <div class="flex justify-between items-end mb-4 group">
-                            <details class="w-full">
-                                <summary class="text-xs text-blue-600 cursor-pointer hover:underline list-none select-none">
-                                    <span class="mr-1">▶</span> View SQL & Tools
-                                </summary>
-                                <div class="mt-2 border border-gray-200 rounded-lg bg-gray-50 p-2">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-xs font-semibold text-gray-500 uppercase">SQL Editor</span>
-                                        <button onclick="runCustomSQL(this)" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-3 py-1 rounded transition-colors">Run Fix</button>
-                                    </div>
-                                    <textarea class="w-full bg-slate-900 text-green-400 font-mono text-xs p-3 rounded h-24 focus:ring-2 focus:ring-blue-500 outline-none resize-y" spellcheck="false">${data.sql}</textarea>
-                                </div>
-                            </details>
-                            
-                            ${(data.data && data.data.length > 0) ? `
-                                <button onclick="exportToCSV(${resultId})" class="ml-2 flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600 bg-white border border-gray-200 hover:border-blue-300 px-3 py-1.5 rounded-lg shadow-sm transition-all whitespace-nowrap">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                    Export CSV
-                                </button>
-                            ` : ''}
-                        </div>`;
-
-                    // Smart Insight 
-                    if (data.insight) {
-                        contentHTML += `
-                            <div class="mb-4 bg-indigo-50 border-l-4 border-indigo-500 p-3 rounded-r flex items-start gap-3">
-                                <div class="text-indigo-500 mt-0.5">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                                </div>
-                                <div>
-                                    <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide">AI Insight</div>
-                                    <div class="text-sm text-indigo-900 font-medium leading-snug">${data.insight}</div>
-                                </div>
-                            </div>`;
-                    }
-
-                    // --- VISUALIZATION LOGIC ---
-                    // Handle Vanna's 'plotly' signal
-                    if (data.visual_type === 'plotly') {
-                        // Heuristic: Check if data implies time-series
-                        if (data.data && data.data.length > 0) {
-                            const keys = Object.keys(data.data[0]);
-                            const hasDate = keys.some(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('ds'));
-                            data.visual_type = hasDate ? 'line' : 'bar';
-                        }
-                    }
-
-                    let visualType = data.visual_type;
-                    if (data.data && data.data.length > 1 && visualType === 'kpi') {
-                        visualType = 'table';
-                    }
-
-                    if (visualType === 'kpi' && data.data.length > 0) {
-                        let val = data.data[0][Object.keys(data.data[0])[0]];
-                        if (typeof val === 'number') val = val.toLocaleString();
-                        contentHTML += `
-                            <div class="p-6 bg-gradient-to-br from-blue-50 to-white border border-blue-100 rounded-xl text-center shadow-sm">
-                                <div class="text-gray-500 text-sm uppercase tracking-wide mb-1">${data.title || 'Result'}</div>
-                                <div class="text-4xl font-bold text-blue-900">${val}</div>
-                            </div>`;
-                        
-                    } else if (['bar', 'line', 'pie'].includes(visualType) && data.data.length > 0) {
-                        const chartId = 'chart-' + Date.now();
-                        contentHTML += `
-                            <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm">
-                                <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title || 'Analysis Chart'}</h4>
-                                <div id="${chartId}" style="width: 100%; height: 350px;"></div>
-                            </div>`;
-                        setTimeout(() => renderChart(chartId, visualType, data.data, data.x_axis, data.y_axis), 100);
-                        
-                    } else {
-                        contentHTML += generateTableHTML(data.data);
-                    }
-                }
-
-                const botMsg = document.createElement('div');
-                botMsg.className = "flex space-x-4 max-w-3xl mx-auto animate-fade-in-up";
-                botMsg.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm mt-1">AI</div>
-                    <div class="bg-white border border-gray-100 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">${contentHTML}</div>`;
-                
-                container.insertBefore(botMsg, anchor);
-                scrollToBottom();
-
-            } catch (e) {
-                console.error(e);
-                if(document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+            } catch (err) {
+                document.getElementById(loadingId).remove();
+                appendSystemMessage("Network Error: " + err.message, "text-red-500");
+            } finally {
+                input.disabled = false;
+                btn.disabled = false;
+                input.focus();
             }
         }
 
-        async function runCustomSQL(btn) {
-            const token = localStorage.getItem('access_token');
-            // Get SQL from textarea
-            const sqlEditorDiv = btn.closest('.bg-gray-50');
-            const textarea = sqlEditorDiv.querySelector('textarea');
-            const sql = textarea.value.trim();
+        // --- Renderers ---
+
+        function appendUserMessage(text) {
+            const container = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+            div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${text}</div>`;
+            container.insertBefore(div, document.getElementById('scroll-anchor'));
+            scrollToBottom();
+        }
+
+        function appendLoader() {
+            const id = 'loader-' + Date.now();
+            const container = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.id = id;
+            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
+                <div class="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
+                    <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
+                    <span class="text-xs text-gray-500 font-medium">Analyzing data...</span>
+                </div>`;
+            container.insertBefore(div, document.getElementById('scroll-anchor'));
+            scrollToBottom();
+            return id;
+        }
+
+        function appendSystemMessage(text, colorClass = "text-gray-800") {
+            const container = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">!</div>
+                <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${text}</div>`;
+            container.insertBefore(div, document.getElementById('scroll-anchor'));
+            scrollToBottom();
+        }
+
+        function renderResponse(data) {
+            const container = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-8";
             
-            // Navigate DOM
-            const detailsElement = sqlEditorDiv.parentElement; 
-            const headerWrapper = detailsElement.parentElement; 
-            const resultArea = headerWrapper.parentElement; 
-
-            if (!sql) return;
-
-            // Loading State
-            const originalText = btn.innerText;
-            btn.innerText = "Running...";
-            btn.disabled = true;
-            btn.classList.add('opacity-75');
-
-            try {
-                // Call Backend
-                const res = await fetch('/api/run_custom_sql', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer ' + token // Send Token
-                    },
-                    body: JSON.stringify({sql_query: sql})
-                });
-                const data = await res.json();
-
-                btn.innerText = originalText;
-                btn.disabled = false;
-                btn.classList.remove('opacity-75');
-
-                if (data.type === 'error') {
-                    alert("SQL Error: " + data.message);
-                    return;
-                }
-
-                // Save for Export
+            // 1. Build Content
+            let content = '';
+            
+            if (data.type === 'error') {
+                content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100">⚠️ ${data.message}</div>`;
+            } 
+            else if (data.type === 'text') {
+                content = `<div class="text-slate-700 text-sm leading-7 prose">${data.message}</div>`;
+            } 
+            else {
+                // Success Data Response
                 const resultId = Date.now();
-                if (data.data && data.data.length > 0) {
-                    window.queryResults[resultId] = data.data;
-                }
+                if(data.data) window.queryResults[resultId] = data.data;
 
-                // Update Export Button
-                const oldExportBtn = headerWrapper.querySelector('button.ml-2');
-                if (oldExportBtn) oldExportBtn.remove();
+                // Thought Header
+                content += `<div class="flex items-center gap-2 mb-3 text-xs text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit">
+                    <span>🧠 Logic:</span> <span class="text-slate-600">${data.thought || 'Processed'}</span>
+                </div>`;
 
-                if (data.data && data.data.length > 0) {
-                    const exportBtn = document.createElement('button');
-                    exportBtn.className = "ml-2 flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600 bg-white border border-gray-200 hover:border-blue-300 px-3 py-1.5 rounded-lg shadow-sm transition-all whitespace-nowrap";
-                    exportBtn.onclick = function() { exportToCSV(resultId); };
-                    exportBtn.innerHTML = `
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Export CSV`;
-                    headerWrapper.appendChild(exportBtn);
-                }
+                // SQL Toggle
+                content += `
+                    <details class="group mb-4">
+                        <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none">
+                            <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            View SQL Query
+                        </summary>
+                        <div class="mt-2 relative">
+                            <textarea class="w-full bg-slate-900 text-emerald-400 font-mono text-xs p-3 rounded-lg h-24 focus:ring-1 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700" spellcheck="false" id="sql-${resultId}">${data.sql}</textarea>
+                            <div class="absolute top-2 right-2 flex gap-2">
+                                <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1 rounded shadow transition-colors">Run Edit</button>
+                            </div>
+                        </div>
+                    </details>`;
 
-                // Render New Result
-                const oldChart = resultArea.querySelector('.border.rounded-xl');
-                if(oldChart) oldChart.remove();
-                
-                const oldTable = resultArea.querySelector('.overflow-x-auto.border'); 
-                if(oldTable) oldTable.remove();
-                
-                const oldError = resultArea.querySelector('.text-red-600');
-                if(oldError) oldError.remove();
-
-                const resultDiv = document.createElement('div');
-                
-                // If Vanna/Backend sends 'plotly' or chart types
-                if (data.visual_type === 'plotly') {
-                     const keys = Object.keys(data.data[0]);
-                     const hasDate = keys.some(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('ds'));
-                     data.visual_type = hasDate ? 'line' : 'bar';
-                }
-
-                if (['bar', 'line', 'pie'].includes(data.visual_type) && data.data.length > 0) {
-                    const chartId = 'chart-' + Date.now();
-                    resultDiv.innerHTML = `
-                        <div class="border border-gray-200 rounded-xl p-4 bg-white shadow-sm mt-4">
-                            <h4 class="text-sm font-semibold text-gray-700 mb-4 text-center">${data.title || 'Result Chart'}</h4>
-                            <div id="${chartId}" style="width: 100%; height: 350px;"></div>
+                // Visualization Area
+                if (data.visual_type === 'plotly' && data.plotly_code) {
+                    const chartId = 'viz-' + resultId;
+                    content += `
+                        <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+                            <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
                         </div>`;
-                    resultArea.appendChild(resultDiv);
-                    renderChart(chartId, data.visual_type, data.data, null, null);
+                    
+                    // Render Plotly after DOM update
+                    setTimeout(() => {
+                        Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
+                    }, 50);
+
+                } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
+                    content += generateTable(data.data);
                 } else {
-                    resultDiv.innerHTML = generateTableHTML(data.data);
-                    resultDiv.classList.add('mt-4');
-                    resultArea.appendChild(resultDiv);
+                    content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center">No data found for this query.</div>`;
                 }
 
-            } catch (e) {
-                console.error(e);
-                alert("Execution failed: " + e);
-                btn.innerText = originalText;
-                btn.disabled = false;
+                // Actions Footer
+                if (data.data && data.data.length > 0) {
+                    content += `
+                        <div class="mt-4 flex gap-2 justify-end">
+                            <button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1 text-slate-500 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-md hover:shadow-sm transition-all">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                Download CSV
+                            </button>
+                        </div>`;
+                }
             }
+
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-md mt-1">AI</div>
+                <div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content}</div>`;
+            
+            container.insertBefore(div, document.getElementById('scroll-anchor'));
+            scrollToBottom();
+        }
+
+        // --- Helpers ---
+
+        function generateTable(data) {
+            if (!data || data.length === 0) return '';
+            const headers = Object.keys(data[0]);
+            let rows = '';
+            data.slice(0, 10).forEach(row => {
+                rows += `<tr class="hover:bg-blue-50/30 transition-colors">` + 
+                        Object.values(row).map(v => `<td class="px-4 py-3 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${(typeof v==='number' && !Number.isInteger(v)) ? v.toFixed(2) : v}</td>`).join('') + 
+                        `</tr>`;
+            });
+            
+            return `
+                <div class="overflow-x-auto rounded-lg border border-slate-200 shadow-sm mt-2">
+                    <table class="min-w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200">${h}</th>`).join('')}</tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-slate-100">${rows}</tbody>
+                    </table>
+                    ${data.length > 10 ? `<div class="p-2 text-center text-xs text-slate-400 bg-slate-50 border-t border-slate-100">Showing first 10 of ${data.length} rows</div>` : ''}
+                </div>`;
         }
 
         function scrollToBottom() {
-            const anchor = document.getElementById('scroll-anchor');
-            anchor.scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('scroll-anchor').scrollIntoView({ behavior: 'smooth' });
         }
 
-        function renderChart(containerId, type, data, xKey, yKey) {
-            const chartDom = document.getElementById(containerId);
-            if (!chartDom) return;
-            const myChart = echarts.init(chartDom);
-            
-            if (!xKey || !yKey) {
-                const keys = Object.keys(data[0]);
-                xKey = keys.find(k => k.toLowerCase().includes('date') || k.toLowerCase().includes('name') || k.toLowerCase().includes('ds')) || keys[0];
-                yKey = keys.find(k => k !== xKey) || keys[1];
-            }
-
-            const labels = data.map(i => i[xKey]);
-            const values = data.map(i => i[yKey]);
-
-            const option = {
-                tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '4%', bottom: '10%', top: '15%', containLabel: true },
-                xAxis: { type: 'category', data: labels, axisLabel: { rotate: 45, fontSize: 10 } },
-                yAxis: { type: 'value' },
-                series: [{
-                    data: values, type: type, smooth: true, itemStyle: { color: '#2563eb' },
-                    areaStyle: type === 'line' ? { opacity: 0.1, color: '#3b82f6' } : null
-                }]
-            };
-            if (type === 'pie') {
-                option.xAxis = null; option.yAxis = null;
-                option.series = [{
-                    type: 'pie', radius: ['40%', '70%'], itemStyle: { borderRadius: 5 },
-                    data: data.map(i => ({ value: i[yKey], name: i[xKey] }))
-                }];
-            }
-            myChart.setOption(option);
-            window.addEventListener('resize', () => myChart.resize());
-        }
-
-        function generateTableHTML(data) {
-            if (!data || data.length === 0) return '<div class="text-gray-500 italic">No data found.</div>';
-            let html = '<div class="overflow-x-auto border border-gray-200 rounded-lg"><table class="min-w-full text-sm divide-y divide-gray-200"><thead class="bg-gray-50"><tr>';
-            Object.keys(data[0]).forEach(k => html += `<th class="px-4 py-3 text-left font-semibold text-gray-600 text-xs uppercase">${k}</th>`);
-            html += '</tr></thead><tbody class="divide-y divide-gray-100 bg-white">';
-            data.slice(0, 10).forEach(row => {
-                html += '<tr class="hover:bg-blue-50/50">';
-                Object.values(row).forEach(v => {
-                    let val = (typeof v === 'number' && v % 1 !== 0) ? v.toFixed(4) : v;
-                    html += `<td class="px-4 py-3 text-gray-700 whitespace-nowrap font-mono text-xs">${val}</td>`;
-                });
-                html += '</tr>';
-            });
-            html += '</tbody></table></div>';
-            return html;
-        }
-
-        function exportToCSV(resultId) {
-            const data = window.queryResults[resultId];
-            if (!data || data.length === 0) {
-                alert("No data to export.");
-                return;
-            }
+        function exportCSV(id) {
+            const data = window.queryResults[id];
+            if(!data) return;
             const headers = Object.keys(data[0]);
-            const csvRows = [];
-            csvRows.push(headers.join(','));
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
+            ].join('\n');
             
-            for (const row of data) {
-                const values = headers.map(header => {
-                    const val = row[header];
-                    const escaped = ('' + (val ?? '')).replace(/"/g, '\\"');
-                    return `"${escaped}"`;
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `analysis_export_${Date.now()}.csv`;
+            link.click();
+        }
+
+        async function runCustomSQL(id) {
+            const textarea = document.getElementById(`sql-${id}`);
+            const sql = textarea.value.trim();
+            if(!sql) return;
+            
+            fillInput("Running custom SQL..."); // Visual Feedback
+            // Note: In a real app, you might want to call the API directly here instead of using the main chat flow
+            // But for simplicity, we treat it as a new "user request" which might get messy.
+            // Better to re-use the sendMessage logic logic but targeted.
+            
+            // For now, let's just trigger the main API with a special flag or just use the separate endpoint manually:
+            try {
+                const res = await fetch('/api/run_custom_sql', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ sql_query: sql })
                 });
-                csvRows.push(values.join(','));
+                const data = await res.json();
+                renderResponse(data);
+            } catch(e) {
+                alert("Error: " + e);
             }
-            
-            const csvString = csvRows.join('\n');
-            const blob = new Blob([csvString], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.setAttribute('hidden', '');
-            a.setAttribute('href', url);
-            a.setAttribute('download', `onebullex_export_${resultId}.csv`);
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
         }
     </script>
 </body>

@@ -1,4 +1,7 @@
 from app.services.vanna_wrapper import vn
+import pandas as pd
+
+# Import all cubes
 import app.cubes.user_profile as user_cube
 import app.cubes.trade_activity as trade_cube
 import app.cubes.points_system as points_cube
@@ -8,84 +11,67 @@ import app.cubes.device_log as device_cube
 import app.cubes.referral_performance as referral_cube
 import app.cubes.risk_blacklist as risk_cube
 
+# Registry of all active cubes
+ACTIVE_CUBES = [
+    user_cube, 
+    trade_cube, 
+    points_cube, 
+    trans_cube, 
+    login_cube, 
+    device_cube, 
+    referral_cube, 
+    risk_cube
+]
+
 async def train_vanna_on_startup(force_retrain: bool = False):
-    print("⚡ Checking Vanna Knowledge Base...")
+    """
+    Smart Training System.
+    Checks each cube against the vector DB state. 
+    Only trains what is missing.
+    """
+    print("⚡ Checking Knowledge Base Integrity...")
     
-    existing_training = vn.get_training_data()
+    # 1. Fetch Current Knowledge
+    try:
+        training_data = vn.get_training_data()
+        if training_data is None:
+            training_data = pd.DataFrame(columns=['id', 'training_data_type', 'content'])
+            
+        # Create a quick lookup set of trained DDLs to avoid re-training
+        # We assume if the DDL is present, the docs/examples are likely there too.
+        # This acts as a 'signature' for the cube.
+        trained_content = set(training_data['content'].tolist())
+        
+    except Exception as e:
+        print(f"⚠️ Warning: Could not fetch training data ({e}). Assuming empty.")
+        trained_content = set()
+
+    # 2. Iterate & Train Missing Cubes
+    train_count = 0
     
-    # Smart Check: If we have data and NO force retrain, check if Trade Cube is missing
-    if not force_retrain and existing_training is not None and not existing_training.empty:
-        # Check if 'dws_all_trades_di' is already known. If not, we continue to training.
-        # We check the 'content' column of the training dataframe
-        if 'dws_all_trades_di' in existing_training['content'].to_string():
-            print(f"✅ Vanna is already trained ({len(existing_training)} records). Ready.")
-            return
+    for cube in ACTIVE_CUBES:
+        # Check if this cube's DDL is already in the vector store
+        is_trained = any(cube.NAME in str(s) for s in trained_content) or \
+                     any(cube.DDL.strip()[:50] in str(s) for s in trained_content)
+
+        if force_retrain or not is_trained:
+            print(f"   -> 🚀 Training Cube: {cube.NAME}...")
+            
+            # A. DDL
+            vn.train(ddl=cube.DDL)
+            
+            # B. Documentation
+            vn.train(documentation=cube.DOCS)
+            
+            # C. Examples
+            for ex in cube.EXAMPLES:
+                vn.train(question=ex['question'], sql=ex['sql'])
+            
+            train_count += 1
         else:
-             print("⚠️ Trade Cube missing. Starting Incremental Training...")
+            print(f"   -> ✅ Cube ready: {cube.NAME}")
 
-    print(f"🚀 Starting Auto-Training (Force: {force_retrain})...")
-
-    # 1. Train User Cube
-    print(f"   -> Training {user_cube.NAME}...")
-    vn.train(ddl=user_cube.DDL)
-    vn.train(documentation=user_cube.DOCS)
-    for ex in user_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-
-    # 2. Train Trade Cube (NEW)
-    print(f"   -> Training {trade_cube.NAME}...")
-    vn.train(ddl=trade_cube.DDL)
-    vn.train(documentation=trade_cube.DOCS)
-    for ex in trade_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-
-    # --- 3. TRAIN POINTS CUBE (NEW) ---
-    print(f"   -> Training {points_cube.NAME}...")
-    vn.train(ddl=points_cube.DDL)
-    vn.train(documentation=points_cube.DOCS)
-    for ex in points_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # ----------------------------------
-
-    # --- 4. TRAIN TRANSACTION CUBE (NEW) ---
-    print(f"   -> Training {trans_cube.NAME}...")
-    vn.train(ddl=trans_cube.DDL)
-    vn.train(documentation=trans_cube.DOCS)
-    for ex in trans_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # ---------------------------------------
-
-    # --- 5. TRAIN LOGIN HISTORY CUBE (NEW) ---
-    print(f"   -> Training {login_cube.NAME}...")
-    vn.train(ddl=login_cube.DDL)
-    vn.train(documentation=login_cube.DOCS)
-    for ex in login_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # -----------------------------------------
-
-    # --- 6. TRAIN DEVICE LOG CUBE (NEW) ---
-    print(f"   -> Training {device_cube.NAME}...")
-    vn.train(ddl=device_cube.DDL)
-    vn.train(documentation=device_cube.DOCS)
-    for ex in device_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # --------------------------------------
-
-    # --- 7. TRAIN REFERRAL CUBE (NEW) ---
-    print(f"   -> Training {referral_cube.NAME}...")
-    vn.train(ddl=referral_cube.DDL)
-    vn.train(documentation=referral_cube.DOCS)
-    for ex in referral_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # ------------------------------------
-    
-    # --- 8. TRAIN RISK BLACKLIST CUBE (NEW) ---
-    print(f"   -> Training {risk_cube.NAME}...")
-    vn.train(ddl=risk_cube.DDL)
-    vn.train(documentation=risk_cube.DOCS)
-    for ex in risk_cube.EXAMPLES:
-        vn.train(question=ex['question'], sql=ex['sql'])
-    # ------------------------------------------
-
-
-    print("✅ Auto-Training Complete!")
+    if train_count > 0:
+        print(f"✅ Training Complete. Added {train_count} new cubes.")
+    else:
+        print("✅ System Ready. All cubes are up to date.")
