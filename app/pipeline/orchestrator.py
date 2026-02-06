@@ -85,7 +85,8 @@ class Orchestrator:
                 sql=final_sql,
                 data=df.head(100).to_dict(orient='records'),
                 visual_type=viz_result['type'],
-                plotly_code=viz_result['code'],
+                # FIX: Use .get('data') because VisualizationAgent now returns JSON data, not python code
+                plotly_code=viz_result.get('data'), 
                 thought=f"Pipeline: Intent={intent_result['intent_type']} -> SQL -> {viz_result['thought']}"
             )
 
