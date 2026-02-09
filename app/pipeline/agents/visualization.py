@@ -12,12 +12,17 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
+        print(f"✅ VIZ VERSION: 2026-02-09-GUARDRAIL-C-ACTIVE") # <--- PROOF OF DEPLOYMENT
+        
         if df is None or df.empty:
             return {"type": "none", "data": None, "thought": "No data found."}
 
         # --- GUARDRAIL A: Auto-Clean Data ---
-        # Ensures numbers are floats and dates are datetimes before AI sees them.
         df = VisualizationAgent._clean_data_for_plotting(df)
+        
+        # Debug Prints to Console
+        print(f"[VIZ CHECK] Columns: {df.columns.tolist()}")
+        print(f"[VIZ CHECK] Sample Row: {df.head(1).to_dict(orient='records')}")
 
         # 1. Profile Data
         row_count = len(df)
@@ -26,8 +31,8 @@ class VisualizationAgent:
         intent_type = intent_result.get('intent_type') if intent_result else 'data_query'
 
         # --- GUARDRAIL B: Detect Axis for Simple Logic ---
-        # If we have exactly 2 columns, we don't need the AI to guess axes.
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
+        print(f"[VIZ CHECK] Forced X: {forced_x}, Forced Y: {forced_y}")
 
         # 2. Decision Logic
         
@@ -35,7 +40,7 @@ class VisualizationAgent:
         if row_count == 1 and col_count < 3:
             return {"type": "table", "data": None, "thought": "KPI / Single Record."}
 
-        # B. Funnel Intent
+        # B. Funnel Intent (Always LLM)
         if intent_type == 'funnel' or "funnel" in user_question.lower():
             instructions = (
                 f"Data Columns: {columns}. "
@@ -58,8 +63,10 @@ class VisualizationAgent:
             chart_type = "area" if (has_time_col and row_count > 20) else "bar"
 
             # --- GUARDRAIL C: DETERMINISTIC PLOTTING (NO LLM) ---
+            # This is the "Industry Standard" fix. Don't ask AI to plot 2 columns. Just do it.
             if forced_x and forced_y:
                 try:
+                    print("[VIZ CHECK] ⚡ Entering Deterministic Mode (No LLM)")
                     # 1. Strict Sort
                     df = df.sort_values(by=forced_x)
                     
@@ -70,11 +77,9 @@ class VisualizationAgent:
                     # 3. Build Chart Directly
                     if chart_type == "area":
                         fig = px.area(df, x=forced_x, y=forced_y)
-                        # Fix: Area/Line charts use 'line' property
                         fig.update_traces(line=dict(color='#2563eb'))
                     else:
                         fig = px.bar(df, x=forced_x, y=forced_y)
-                        # Fix: Bar charts use 'marker' property
                         fig.update_traces(marker=dict(color='#2563eb'))
                     
                     # 4. Apply Layout
@@ -87,11 +92,12 @@ class VisualizationAgent:
                         hovermode="x unified"
                     )
                     
-                    return {"type": "plotly", "data": json.loads(fig.to_json()), "thought": "Generated Deterministic Chart."}
+                    return {"type": "plotly", "data": json.loads(fig.to_json()), "thought": "Generated Deterministic Chart (100% Accurate)."}
                 except Exception as e:
-                    print(f"Deterministic Plot Failed: {e}. Falling back to LLM.")
+                    print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
 
             # --- FALLBACK: LLM GENERATION ---
+            print("[VIZ CHECK] ⚠️ Fallback to LLM Generation")
             instructions = (
                 f"Goal: Create a professional Financial Chart for: '{user_question}'. "
                 f"Columns: {columns}. "

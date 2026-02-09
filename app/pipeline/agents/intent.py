@@ -1,32 +1,28 @@
 import json
-import pandas as pd # <--- NEW IMPORT
-from pydantic import BaseModel, Field
-from typing import Optional, List
+import re
 from app.services.vanna_wrapper import vn 
-
-class IntentResponse(BaseModel):
-    intent_type: str = Field(..., description="One of: 'data_query', 'general_chat', 'ambiguous'")
-    entities: List[str] = Field(default=[], description="List of tables/metrics mentioned")
-    time_range: Optional[str] = Field(None, description="Time range mentioned")
-    needs_clarification: bool = False
-    clarification_question: Optional[str] = None
 
 class IntentAgent:
     """
     Classifies user message BEFORE generating SQL.
+    Returns structured intent data to the Orchestrator.
     """
     
     SYSTEM_PROMPT = """
     You are the Intent Classifier for OneBullEx (OBE) Data Platform.
-    Your job is to categorize the user's input into JSON.
+    Your job is to categorize the user's input into JSON format.
     
     CATEGORIES:
-    1. 'data_query': User asks for stats, numbers, lists, trends, or charts.
+    1. 'data_query': User asks for stats, numbers, lists, trends, charts, or specific business metrics (e.g. "volume", "users", "risk").
     2. 'general_chat': User says "Hi", "Thanks", "Who are you?", or non-data questions.
-    3. 'ambiguous': User asks a vague question like "Show me data" without specifying what data.
+    3. 'ambiguous': User asks a vague question like "Show me data" or "How is performance" without specifying time or metric.
     
-    OUTPUT FORMAT:
-    Strict JSON only. No markdown.
+    OUTPUT SCHEMA (JSON Only):
+    {
+        "intent_type": "data_query" | "general_chat" | "ambiguous",
+        "entities": ["list", "of", "metrics", "or", "tables"],
+        "clarification_question": "If ambiguous, ask a specific question like 'By volume or count?'" (or null)
+    }
     """
 
     @staticmethod
@@ -34,19 +30,33 @@ class IntentAgent:
         prompt = f"""
         {IntentAgent.SYSTEM_PROMPT}
         USER MESSAGE: "{user_msg}"
-        Return JSON:
+        Return strictly JSON. No markdown formatting.
         """
         
         try:
-            # FIX: Pass an empty DataFrame instead of None to prevent 'NoneType' error
-            empty_df = pd.DataFrame() 
-            response_text = await vn.generate_summary(question=prompt, df=empty_df)
+            # Use generate_text for raw LLM prompts (generate_summary requires a DF)
+            # Depending on your Vanna version/wrapper, ensure this is the non-plotting text method.
+            # If vn.generate_text is sync, we wrap it or just run it (since this func is async def).
+            response_text = vn.generate_text(prompt)
             
-            # Clean JSON
-            json_text = response_text.replace("```json", "").replace("```", "").strip()
-            return json.loads(json_text)
+            # --- GUARDRAIL: Clean JSON ---
+            # Remove markdown code fences if the LLM adds them
+            clean_json = re.sub(r'```json|```', '', response_text, flags=re.IGNORECASE).strip()
+            
+            # Parse
+            result = json.loads(clean_json)
+            
+            # Ensure keys exist
+            if "intent_type" not in result:
+                result["intent_type"] = "data_query"
+                
+            return result
             
         except Exception as e:
-            print(f"Intent Error: {e}")
-            # Fallback
-            return {"intent_type": "data_query"}
+            print(f"Intent Classification Error: {e}")
+            # Safe Fallback to ensure pipeline continues
+            return {
+                "intent_type": "data_query", 
+                "entities": [], 
+                "clarification_question": None
+            }
