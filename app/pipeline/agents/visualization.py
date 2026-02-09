@@ -7,6 +7,7 @@ from app.services.vanna_wrapper import vn
 class VisualizationAgent:
     """
     Decides format and Executes Plotly code to return JSON.
+    Applies Professional/Fintech styling rules.
     """
 
     @staticmethod
@@ -31,52 +32,61 @@ class VisualizationAgent:
 
         # --- DECISION TREE ---
         
-        # A. Funnel
+        # A. Funnel (Specific Intent)
         if is_funnel:
-            code = await vn.generate_plotly_code_async(
-                "Create a Funnel Chart. Use text column for stages, numeric for values.", sql, df
+            instructions = (
+                "Create a Funnel Chart using plotly.graph_objects. "
+                "Use a modern color scale (Blues). "
+                "Ensure text info shows value and percent."
             )
+            code = await vn.generate_plotly_code_async(instructions, sql, df)
             fig_json = VisualizationAgent._execute_plotly_code(code, df)
             return {"type": "plotly", "data": fig_json, "thought": "Detected Funnel intent."}
 
-        # B. Single Row -> Table
+        # B. Single Row -> Table (KPI)
         if row_count == 1:
-            return {"type": "table", "data": None, "thought": "Single row result."}
+            return {"type": "table", "data": None, "thought": "Single row result (KPI)."}
 
         # C. Forced Table / Raw Data
         if force_table or (is_raw_select and not force_chart):
             return {"type": "table", "data": None, "thought": "Raw data or user requested table."}
 
-        # D. Forced Chart
-        if force_chart:
+        # D. Forced Chart / Analytical Data
+        if force_chart or (has_aggregates and row_count > 1):
             if col_count < 2:
                 return {"type": "table", "data": None, "thought": "Data insufficient for chart (1 column)."}
             
-            code = await vn.generate_plotly_code_async(
-                f"Visualize this data. Question: {user_question}", sql, df
-            )
-            fig_json = VisualizationAgent._execute_plotly_code(code, df)
-            return {"type": "plotly", "data": fig_json, "thought": "User requested chart."}
-
-        # E. Analytical Data (Default to Chart)
-        if has_aggregates and row_count > 1:
+            # --- PROMPT ENGINEERING FOR PROFESSIONAL CHARTS ---
+            # We explicitly guide the chart choice based on data volume
+            chart_guidance = "Use a Bar Chart (px.bar)" if row_count < 25 else "Use an Area Chart (px.area)"
+            
             instructions = (
-                f"Visualize this data. Question: '{user_question}'. "
+                f"Goal: Create a professional Financial/BI Chart for: '{user_question}'. "
+                f"Data Shape: {row_count} rows. "
+                
                 f"CRITICAL PRE-PROCESSING: "
-                f"1. If the dataframe has a column 'ds' (YYYYMMDD string), convert it first: "
-                f"   df['ds'] = pd.to_datetime(df['ds'].astype(str), format='%Y%m%d') "
-                f"2. Sort the dataframe by date. "
+                f"1. If 'ds' column exists (YYYYMMDD), convert it: df['ds'] = pd.to_datetime(df['ds'].astype(str), format='%Y%m%d'). "
+                f"2. Sort dataframe by the x-axis column. "
+                
                 f"VISUALIZATION RULES: "
-                f"1. Use Grouped Bar for multiple metrics. "
-                f"2. Use Line Chart for single metric trends. "
-                f"3. X-axis tick format: '%Y-%m-%d'. "
-                f"4. Assign the figure to variable 'fig'."
+                f"1. {chart_guidance}. Do NOT use a simple line chart unless requested. "
+                f"2. Color Scheme: Use professional deep blues (discrete_sequence=['#2563eb', '#1d4ed8']). "
+                f"3. Template: Use 'plotly_white'. "
+                f"4. Y-Axis: Format with commas (tickformat=','). "
+                f"5. Layout: Minimalist. Remove X-axis grid lines. Add hover data. "
+                f"6. Assign result to variable 'fig'."
             )
+            
             code = await vn.generate_plotly_code_async(instructions, sql, df)
             fig_json = VisualizationAgent._execute_plotly_code(code, df)
-            return {"type": "plotly", "data": fig_json, "thought": "Detected analytical trend."}
+            
+            # Fallback if code gen fails
+            if not fig_json:
+                return {"type": "table", "data": None, "thought": "Chart generation failed, falling back to table."}
+                
+            return {"type": "plotly", "data": fig_json, "thought": f"Generated professional {chart_guidance.split(' ')[2]}."}
 
-        # F. Fallback
+        # E. Fallback
         return {"type": "table", "data": None, "thought": "Standard list."}
 
     @staticmethod
@@ -85,17 +95,23 @@ class VisualizationAgent:
         Safely executes the LLM-generated Python code to produce a Plotly Figure JSON.
         """
         try:
-            # Create a localized environment
+            # Inject dependencies including pandas for the pre-processing logic
             local_vars = {"df": df, "go": go, "px": px, "pd": pd}
             
-            # Execute the string code
+            # Execute
             exec(code, {}, local_vars)
             
-            # The LLM is trained to create a variable named 'fig'
+            # Extract 'fig'
             fig = local_vars.get("fig")
             
             if fig:
-                # Convert to JSON for the frontend
+                # --- Post-Processing Injection (Safety Polish) ---
+                # Even if the LLM forgets, we enforce the 'white' template and margins here
+                fig.update_layout(
+                    template="plotly_white",
+                    margin=dict(l=40, r=40, t=40, b=40),
+                    font=dict(family="Inter, sans-serif", color="#475569")
+                )
                 return json.loads(fig.to_json())
             else:
                 return None
