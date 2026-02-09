@@ -112,18 +112,41 @@ class Orchestrator:
         # Formats: 20260208 and 2026-02-08
         latest_ds_iso = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
+
+        # Calculate "Last 7 Days" start date for the AI
+        start_7d = (datetime.strptime(latest_ds, "%Y%m%d") - timedelta(days=6)).strftime("%Y%m%d")
         
         return f"""
         {history}
         
         CURRENT CONTEXT:
         - You are the Data Analyst for **OneBullEx (OBE)**.
+        - **System:** Alibaba Dataworks / Hologres Architecture.
         - **SYSTEM TIME:** The database is updated via Daily Batch. 
         - **LATEST AVAILABLE DATA:** {latest_ds_iso} (Partition: ds='{latest_ds}').
         - **REAL TIME:** {today_iso} (Do NOT use this for data filtering).
         
         INTENT: {intent.get('intent_type')}
         ENTITIES: {intent.get('entities', [])}
+
+        CRITICAL PARTITIONING RULES (SUFFIX LOGIC):
+        
+        1. **INCREMENTAL TABLES (Suffix: `_di`):** - Contains ONLY that specific day's data. 
+           - **Rule:** For Trends/History, you MUST scan a range of partitions.
+           - *Incorrect:* `WHERE ds = '{latest_ds}' AND date >= ...` (This only scans 1 day!)
+           - *Correct:* `WHERE ds >= '{start_7d}' AND ds <= '{latest_ds}'`
+           - **Tables:** `dws_all_trades_di`, `dws_user_deposit_withdraw_detail_di`, `dwd_login_history_log_di`, `dwd_user_device_log_di`.
+
+        2. **SNAPSHOT TABLES (Suffix: `_df` or `user_profile_360`):**
+           - Contains the FULL history/state as of that day.
+           - **Rule:** Always query ONE partition (the latest) to get the current state.
+           - *Correct:* `WHERE ds = '{latest_ds}'`
+           - *Exception:* Only query a range of `ds` if specifically analyzing "State Changes" (e.g. "How did balance change day-over-day?").
+           - **Tables:** `user_profile_360` (View over _df), `ads_total_root_referral_volume_df`.
+
+        3. **TIME HANDLING:**
+           - **NEVER** use `NOW()` or `CURRENT_TIMESTAMP`. The data ends at `{latest_ds_iso}`.
+           - For "Last 7 Days", use the calculated partition range: `ds BETWEEN '{start_7d}' AND '{latest_ds}'`.
         
         CRITICAL SQL RULES:
         1. **Snapshots:** For "Current Status" (e.g. "total users", "balance"), YOU MUST filter by `ds='{latest_ds}'`.
