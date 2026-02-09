@@ -30,8 +30,16 @@ class VisualizationAgent:
             return bool(obj)
 
         # Numpy arrays
+        # Numpy arrays
         if isinstance(obj, np.ndarray):
+            # ✅ IMPORTANT: handle datetime arrays (otherwise becomes 1.77e18)
+            if np.issubdtype(obj.dtype, np.datetime64):
+                return [pd.to_datetime(x).isoformat() for x in obj]
             return obj.tolist()
+
+        # ✅ numpy datetime64 scalar
+        if isinstance(obj, np.datetime64):
+            return pd.to_datetime(obj).isoformat()
 
         # Pandas timestamps / Python dates
         if isinstance(obj, (pd.Timestamp, datetime, date)):
@@ -117,6 +125,8 @@ class VisualizationAgent:
                     else:
                         fig = px.bar(df, x=forced_x, y=forced_y)
                         fig.update_traces(marker=dict(color='#2563eb'))
+                    
+                    fig.update_xaxes(type="date")
                     
                     # 4. Apply Layout
                     fig.update_layout(
