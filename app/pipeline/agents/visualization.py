@@ -11,6 +11,40 @@ class VisualizationAgent:
     Decides format and Executes Plotly code to return JSON.
     Hybrid Engine: Deterministic for simple data, LLM for complex.
     """
+    @staticmethod
+    def _make_jsonable(obj):
+        """
+        Recursively convert Plotly/Pandas/Numpy objects into JSON-serializable types
+        (dict/list/str/int/float/bool/None).
+        """
+        import numpy as np
+        import pandas as pd
+        from datetime import date, datetime
+
+        # Numpy scalars
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+
+        # Numpy arrays
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+
+        # Pandas timestamps / Python dates
+        if isinstance(obj, (pd.Timestamp, datetime, date)):
+            # ISO string is safest for JSON
+            return obj.isoformat()
+
+        # Dict / list / tuple
+        if isinstance(obj, dict):
+            return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [VisualizationAgent._make_jsonable(v) for v in obj]
+
+        return obj
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
@@ -94,7 +128,10 @@ class VisualizationAgent:
                         hovermode="x unified"
                     )
                     
-                    return {"type": "plotly", "data": fig.to_dict(), "thought": "Generated Deterministic Chart (100% Accurate)."}
+                    plotly_dict = VisualizationAgent._make_jsonable(fig.to_dict())
+                    return {"type": "plotly", "data": plotly_dict, "thought": "Generated Deterministic Chart (100% Accurate)."}
+
+                    
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
 
@@ -224,7 +261,7 @@ class VisualizationAgent:
                     yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'),
                     hovermode="x unified"
                 )
-                return fig.to_dict()
+                return VisualizationAgent._make_jsonable(fig.to_dict())
             return None
         except Exception as e:
             print(f"Viz Error: {e}")
