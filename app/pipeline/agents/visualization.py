@@ -94,7 +94,7 @@ class VisualizationAgent:
                         hovermode="x unified"
                     )
                     
-                    return {"type": "plotly", "data": json.loads(fig.to_json()), "thought": "Generated Deterministic Chart (100% Accurate)."}
+                    return {"type": "plotly", "data": fig.to_dict(), "thought": "Generated Deterministic Chart (100% Accurate)."}
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
 
@@ -224,7 +224,7 @@ class VisualizationAgent:
                     yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'),
                     hovermode="x unified"
                 )
-                return json.loads(fig.to_json())
+                return fig.to_dict()
             return None
         except Exception as e:
             print(f"Viz Error: {e}")

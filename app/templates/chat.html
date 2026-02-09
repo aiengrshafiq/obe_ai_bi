@@ -296,6 +296,7 @@
                             <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
                         </div>`;
                     setTimeout(() => {
+                        Plotly.purge(chartId);
                         Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
                     }, 50);
                 } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
