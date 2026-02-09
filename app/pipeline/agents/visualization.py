@@ -3,6 +3,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import json
 from app.services.vanna_wrapper import vn
+from datetime import date, datetime, timedelta
+import re
 
 class VisualizationAgent:
     """
@@ -116,31 +118,53 @@ class VisualizationAgent:
         # D. Fallback
         return {"type": "table", "data": None, "thought": "Standard data list."}
 
+
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy() 
+        df = df.copy()
+
+        date_like_names = {
+            'ds','date','day','time','created_at','trade_datetime',
+            'registration_date','hour','trade_date'
+        }
+
         for col in df.columns:
             col_lower = col.lower()
-            # Date Conversion
-            if col_lower in ['ds', 'date', 'day', 'created_at', 'trade_datetime', 'registration_date', 'hour']:
+
+            # ---------- DATE / TIME CONVERSION ----------
+            is_name_date_like = (
+                col_lower in date_like_names
+                or "date" in col_lower
+                or col_lower.endswith("_date")
+                or col_lower.endswith("_dt")
+            )
+
+            if is_name_date_like:
+                # 1) If it's ds-like 'YYYYMMDD', parse with format first
                 try:
-                    df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
-                    if df[col].isna().all():
-                         df[col] = pd.to_datetime(df[col], errors='coerce')
+                    s = df[col].astype(str).str.strip()
+                    dt = pd.to_datetime(s, format="%Y%m%d", errors="coerce")
+                    # 2) Fallback to generic parser (handles ISO strings and python date objects)
+                    if dt.isna().all():
+                        dt = pd.to_datetime(df[col], errors="coerce")
+                    df[col] = dt
                 except:
                     try:
-                        df[col] = pd.to_datetime(df[col], errors='coerce')
-                    except: pass
-            
-            # Numeric Conversion
-            else:
-                try:
-                    s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
-                    num = pd.to_numeric(s, errors='coerce')
-                    if num.notna().mean() >= 0.60:
-                        df[col] = num
-                except:
-                    pass
+                        df[col] = pd.to_datetime(df[col], errors="coerce")
+                    except:
+                        pass
+                continue  # done with date column
+
+            # ---------- NUMERIC CONVERSION ----------
+            try:
+                s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
+                num = pd.to_numeric(s, errors='coerce')
+                # convert only if mostly numeric
+                if num.notna().mean() >= 0.60:
+                    df[col] = num
+            except:
+                pass
+
         return df
 
     @staticmethod
@@ -149,19 +173,33 @@ class VisualizationAgent:
             return None, None
 
         cols = list(df.columns)
-        date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','hour'}
+        date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','trade_date','hour'}
+        #date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','trade_date'}
 
-        # Find X
-        x_candidates = [c for c in cols if c.lower() in date_like]
-        if not x_candidates:
-            x_candidates = [c for c in cols if pd.api.types.is_datetime64_any_dtype(df[c])]
+        x_candidates = []
+        for c in cols:
+            # 1. Name Match
+            if c.lower() in date_like:
+                x_candidates.append(c)
+                continue
+            
+            # 2. Type Match (Timestamp OR Date Object)
+            if pd.api.types.is_datetime64_any_dtype(df[c]):
+                x_candidates.append(c)
+                continue
+            
+            # 3. Object Check (Is it a datetime.date object?)
+            try:
+                first_val = df[c].dropna().iloc[0]
+                if isinstance(first_val, (date, datetime)):
+                    x_candidates.append(c)
+            except: pass
 
         if not x_candidates:
             return None, None 
 
         x_col = x_candidates[0]
         y_col = cols[1] if cols[0] == x_col else cols[0]
-
         return x_col, y_col
 
     @staticmethod

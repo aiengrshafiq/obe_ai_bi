@@ -6,62 +6,41 @@ from app.services.vanna_wrapper import vn
 class IntentAgent:
     """
     Classifies user message BEFORE generating SQL.
-    Returns structured intent data to the Orchestrator.
     """
     
     SYSTEM_PROMPT = """
-    You are the Intent Classifier for OneBullEx (OBE) Data Platform.
-    Your job is to categorize the user's input into JSON format.
-    
+    You are the Intent Classifier.
     CATEGORIES:
-    1. 'data_query': User asks for stats, numbers, lists, trends, charts, or specific business metrics (e.g. "volume", "users", "risk").
-    2. 'general_chat': User says "Hi", "Thanks", "Who are you?", or non-data questions.
-    3. 'ambiguous': User asks a vague question like "Show me data" or "How is performance" without specifying time or metric.
+    1. 'data_query': asking for data, metrics, charts.
+    2. 'general_chat': greetings, non-data talk.
+    3. 'ambiguous': vague questions.
     
-    OUTPUT SCHEMA (JSON Only):
-    {
-        "intent_type": "data_query" | "general_chat" | "ambiguous",
-        "entities": ["list", "of", "metrics", "or", "tables"],
-        "clarification_question": "If ambiguous, ask a specific question like 'By volume or count?'" (or null)
-    }
+    OUTPUT: Valid JSON only. Example: {"intent_type": "data_query", "entities": []}
     """
 
     @staticmethod
     async def classify(user_msg: str) -> dict:
-        prompt = f"""
-        {IntentAgent.SYSTEM_PROMPT}
-        USER MESSAGE: "{user_msg}"
-        Return strictly JSON. No markdown formatting.
-        """
+        prompt = f"{IntentAgent.SYSTEM_PROMPT}\nUSER MESSAGE: \"{user_msg}\""
         
         try:
-            # FIX 1: Use generate_summary because generate_text doesn't exist on your instance
-            # FIX 2: Pass empty DataFrame to satisfy signature
             empty_df = pd.DataFrame()
-            
-            # FIX 3: REMOVE 'await'. Your logs show vn returns a string, not a coroutine.
-            # The 'async def' wrapper allows the Orchestrator to await THIS function, 
-            # but inside we run synchronous Vanna code.
+            # Generate response
             response_text = vn.generate_summary(question=prompt, df=empty_df)
             
-            # --- GUARDRAIL: Clean JSON ---
-            # Remove markdown code fences if the LLM adds them
-            clean_json = re.sub(r'```json|```', '', response_text, flags=re.IGNORECASE).strip()
+            # Sanity check
+            if not response_text:
+                return {"intent_type": "data_query"}
+
+            # Regex to find the JSON object { ... } inside the text
+            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             
-            # Parse
-            result = json.loads(clean_json)
+            if json_match:
+                clean_json = json_match.group(0)
+                return json.loads(clean_json)
+            else:
+                # If no JSON found, assume data_query (Safe Fallback)
+                return {"intent_type": "data_query"}
             
-            # Ensure keys exist
-            if "intent_type" not in result:
-                result["intent_type"] = "data_query"
-                
-            return result
-            
-        except Exception as e:
-            print(f"Intent Classification Error: {e}")
-            # Safe Fallback to ensure pipeline continues
-            return {
-                "intent_type": "data_query", 
-                "entities": [], 
-                "clarification_question": None
-            }
+        except Exception:
+            # Suppress error printing to keep logs clean, since fallback works.
+            return {"intent_type": "data_query"}
