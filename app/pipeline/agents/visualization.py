@@ -141,8 +141,7 @@ class VisualizationAgent:
         if df is None or len(df.columns) != 2:
             return None, None
 
-        if not pd.api.types.is_numeric_dtype(df[y_col]):
-            return None, None
+        
 
         cols = list(df.columns)
         date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','hour'}
@@ -159,6 +158,9 @@ class VisualizationAgent:
         x_col = x_candidates[0]
         # Y is simply the "other" column
         y_col = cols[1] if cols[0] == x_col else cols[0]
+
+        if not pd.api.types.is_numeric_dtype(df[y_col]):
+            return None, None
 
         return x_col, y_col
 
