@@ -2,15 +2,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import json
-import re
 from app.services.vanna_wrapper import vn
 
 class VisualizationAgent:
     """
     Decides format and Executes Plotly code to return JSON.
-    Hybrid Engine:
-    - Simple Data (2 cols) -> Deterministic Python Plotting (100% Accuracy)
-    - Complex Data (3+ cols) -> LLM Code Generation (Flexibility)
+    Hybrid Engine: Deterministic for simple data, LLM for complex.
     """
 
     @staticmethod
@@ -18,7 +15,8 @@ class VisualizationAgent:
         if df is None or df.empty:
             return {"type": "none", "data": None, "thought": "No data found."}
 
-        # --- GUARDRAIL A: Global Auto-Clean ---
+        # --- GUARDRAIL A: Auto-Clean Data ---
+        # Ensures numbers are floats and dates are datetimes before AI sees them.
         df = VisualizationAgent._clean_data_for_plotting(df)
 
         # 1. Profile Data
@@ -28,6 +26,7 @@ class VisualizationAgent:
         intent_type = intent_result.get('intent_type') if intent_result else 'data_query'
 
         # --- GUARDRAIL B: Detect Axis for Simple Logic ---
+        # If we have exactly 2 columns, we don't need the AI to guess axes.
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
 
         # 2. Decision Logic
@@ -36,7 +35,7 @@ class VisualizationAgent:
         if row_count == 1 and col_count < 3:
             return {"type": "table", "data": None, "thought": "KPI / Single Record."}
 
-        # B. Funnel Intent (Always LLM)
+        # B. Funnel Intent
         if intent_type == 'funnel' or "funnel" in user_question.lower():
             instructions = (
                 f"Data Columns: {columns}. "
@@ -59,38 +58,40 @@ class VisualizationAgent:
             chart_type = "area" if (has_time_col and row_count > 20) else "bar"
 
             # --- GUARDRAIL C: DETERMINISTIC PLOTTING (NO LLM) ---
-            # If we know X and Y exactly, build the chart manually.
             if forced_x and forced_y:
                 try:
                     # 1. Strict Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Strict Numeric Conversion (Strip commas for currency strings)
+                    # 2. Strict Numeric Conversion (Strip commas)
+                    # This handles the '193,880,587.59' string format issue
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
                     # 3. Build Chart Directly
                     if chart_type == "area":
                         fig = px.area(df, x=forced_x, y=forced_y)
+                        # Fix: Area/Line charts use 'line' property
+                        fig.update_traces(line=dict(color='#2563eb'))
                     else:
                         fig = px.bar(df, x=forced_x, y=forced_y)
+                        # Fix: Bar charts use 'marker' property
+                        fig.update_traces(marker=dict(color='#2563eb'))
                     
-                    # 4. Apply Branding
-                    fig.update_traces(marker=dict(color='#2563eb'), line=dict(color='#2563eb'))
+                    # 4. Apply Layout
                     fig.update_layout(
                         template="plotly_white",
                         margin=dict(l=40, r=40, t=40, b=40),
                         font=dict(family="Inter, sans-serif", color="#475569"),
                         xaxis=dict(showgrid=False, title=None),
-                        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'), # 1M, 200k
+                        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'), 
                         hovermode="x unified"
                     )
                     
-                    return {"type": "plotly", "data": json.loads(fig.to_json()), "thought": "Generated Deterministic Chart (Accuracy Guarantee)."}
+                    return {"type": "plotly", "data": json.loads(fig.to_json()), "thought": "Generated Deterministic Chart."}
                 except Exception as e:
                     print(f"Deterministic Plot Failed: {e}. Falling back to LLM.")
-                    # Fallthrough to LLM if manual build crashes
 
-            # --- FALLBACK: LLM GENERATION (For 3+ columns or complex cases) ---
+            # --- FALLBACK: LLM GENERATION ---
             instructions = (
                 f"Goal: Create a professional Financial Chart for: '{user_question}'. "
                 f"Columns: {columns}. "
@@ -111,27 +112,25 @@ class VisualizationAgent:
 
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Deterministically converts columns to correct types.
-        """
         df = df.copy() 
         for col in df.columns:
             col_lower = col.lower()
-            # 1. Date Conversion
+            # Date Conversion
             if col_lower in ['ds', 'date', 'day', 'created_at', 'trade_datetime', 'registration_date', 'hour']:
                 try:
                     df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
                     if df[col].isna().all():
                          df[col] = pd.to_datetime(df[col], errors='coerce')
                 except:
-                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                    try:
+                        df[col] = pd.to_datetime(df[col], errors='coerce')
+                    except: pass
             
-            # 2. Smart Numeric Conversion (Safe for Categories)
+            # Numeric Conversion
             else:
                 try:
                     s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
                     num = pd.to_numeric(s, errors='coerce')
-                    # If >60% are numbers, treat as metric. Else keep as categorical.
                     if num.notna().mean() >= 0.60:
                         df[col] = num
                 except:
@@ -140,9 +139,6 @@ class VisualizationAgent:
 
     @staticmethod
     def _force_xy_for_two_columns(df: pd.DataFrame):
-        """
-        If df has exactly 2 columns, deterministically find X (Date) and Y (Metric).
-        """
         if df is None or len(df.columns) != 2:
             return None, None
 
@@ -171,12 +167,13 @@ class VisualizationAgent:
             
             if fig:
                 if chart_kind == "standard":
+                    # Fix: Apply styling generally, but don't crash on invalid props
                     try:
-                        fig.update_traces(marker=dict(color='#2563eb'), line=dict(color='#2563eb'))
+                        fig.update_layout(template="plotly_white")
+                        fig.update_traces(marker_color='#2563eb') # Safer than specific dicts
                     except: pass 
 
                 fig.update_layout(
-                    template="plotly_white",
                     margin=dict(l=40, r=40, t=40, b=40),
                     font=dict(family="Inter, sans-serif", color="#475569"),
                     xaxis=dict(showgrid=False, title=None),
