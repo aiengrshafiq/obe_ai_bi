@@ -1,5 +1,6 @@
 import json
 import re
+import pandas as pd
 from app.services.vanna_wrapper import vn 
 
 class IntentAgent:
@@ -34,10 +35,14 @@ class IntentAgent:
         """
         
         try:
-            # Use generate_text for raw LLM prompts (generate_summary requires a DF)
-            # Depending on your Vanna version/wrapper, ensure this is the non-plotting text method.
-            # If vn.generate_text is sync, we wrap it or just run it (since this func is async def).
-            response_text = vn.generate_text(prompt)
+            # FIX 1: Use generate_summary because generate_text doesn't exist on your instance
+            # FIX 2: Pass empty DataFrame to satisfy signature
+            empty_df = pd.DataFrame()
+            
+            # FIX 3: REMOVE 'await'. Your logs show vn returns a string, not a coroutine.
+            # The 'async def' wrapper allows the Orchestrator to await THIS function, 
+            # but inside we run synchronous Vanna code.
+            response_text = vn.generate_summary(question=prompt, df=empty_df)
             
             # --- GUARDRAIL: Clean JSON ---
             # Remove markdown code fences if the LLM adds them
