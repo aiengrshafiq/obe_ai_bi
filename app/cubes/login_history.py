@@ -2,7 +2,8 @@
 
 NAME = "Login History Cube"
 DESCRIPTION = "Audit trail of user logins, IP addresses, locations, and device information (OS, Browser)."
-
+HAS_TIME_FIELD = True
+TIME_COLUMN = "create_at"
 # 1. DDL
 DDL = """
 CREATE TABLE public.dwd_login_history_log_di (

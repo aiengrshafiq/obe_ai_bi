@@ -2,7 +2,8 @@
 
 NAME = "Referral Performance Cube"
 DESCRIPTION = "Tracks root partner performance, referral volumes, community size, and commission-related metrics."
-
+HAS_TIME_FIELD = False
+TIME_COLUMN = None
 # 1. DDL
 DDL = """
 CREATE TABLE public.ads_total_root_referral_volume_df (

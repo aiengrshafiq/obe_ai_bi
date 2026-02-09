@@ -2,7 +2,8 @@
 
 NAME = "Device & Fraud Log Cube"
 DESCRIPTION = "Detailed device fingerprinting, risk scores (VPN/Proxy), and user event tracking (Register/Login)."
-
+HAS_TIME_FIELD = True
+TIME_COLUMN = "create_at"
 # 1. DDL (Exact Schema)
 DDL = """
 CREATE TABLE public.dwd_user_device_log_di (

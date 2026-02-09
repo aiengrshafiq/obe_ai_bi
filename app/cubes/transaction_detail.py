@@ -2,7 +2,8 @@
 
 NAME = "Transaction Detail Cube"
 DESCRIPTION = "Granular deposit and withdrawal records. Use for audit, fees, wallet checks, and net flow analysis."
-
+HAS_TIME_FIELD = True
+TIME_COLUMN = "create_at"
 # 1. DDL
 DDL = """
 CREATE TABLE public.dws_user_deposit_withdraw_detail_di (

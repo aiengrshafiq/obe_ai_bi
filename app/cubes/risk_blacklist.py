@@ -2,7 +2,8 @@
 
 NAME = "Risk Campaign Blacklist"
 DESCRIPTION = "Registry of blocked users (abusers) for specific campaigns. Use to check if a user is banned."
-
+HAS_TIME_FIELD = True
+TIME_COLUMN = "start_date"
 # 1. DDL (AI-Optimized)
 
 DDL = """

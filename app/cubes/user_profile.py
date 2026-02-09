@@ -3,7 +3,8 @@
 # 1. Identity
 NAME = "User Profile Cube"
 DESCRIPTION = "Contains daily snapshots of user profiles, lifetime stats, risk scores, and current balances."
-
+HAS_TIME_FIELD = True
+TIME_COLUMN = "registration_date"
 # 2. DDL (The Structure)
 # Note: Copied exactly from your validated schema.
 DDL = """

@@ -46,6 +46,9 @@ class SQLGuard:
             # Check for forbidden functions
             if isinstance(node, exp.Func):
                 func_name = node.sql().split('(')[0].upper()
+                if func_name in ["NOW", "CURRENT_TIMESTAMP", "LOCALTIMESTAMP"]:
+                     pass # In Phase 2, we can auto-replace this with '2026-02-08'. For now, let the prompt handle it.
+                     
                 if func_name in SQLGuard.FORBIDDEN_FUNCTIONS:
                     raise SQLPolicyException(f"Security Alert: Function '{func_name}' is banned.")
 

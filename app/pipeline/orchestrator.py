@@ -108,6 +108,9 @@ class Orchestrator:
         if not latest_ds:
             latest_ds = yesterday.strftime("%Y%m%d")
             
+        
+        # Formats: 20260208 and 2026-02-08
+        latest_ds_iso = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
         
         return f"""
@@ -115,8 +118,9 @@ class Orchestrator:
         
         CURRENT CONTEXT:
         - You are the Data Analyst for **OneBullEx (OBE)**.
-        - Today's Date: {today_iso}
-        - Latest Snapshot Partition: ds='{latest_ds}'
+        - **SYSTEM TIME:** The database is updated via Daily Batch. 
+        - **LATEST AVAILABLE DATA:** {latest_ds_iso} (Partition: ds='{latest_ds}').
+        - **REAL TIME:** {today_iso} (Do NOT use this for data filtering).
         
         INTENT: {intent.get('intent_type')}
         ENTITIES: {intent.get('entities', [])}
@@ -127,6 +131,27 @@ class Orchestrator:
         3. **Funnels:** Use `UNION ALL` to stack stages vertically.
         4. **Formatting:** `user_code` is STRING (use quotes).
         
+        CRITICAL TIME HANDLING RULES (ANCHOR SHIFTING):
+        1. **Daily Batch Rule:** The data ends at {latest_ds_iso} 23:59:59. 
+           - If user asks for "Last 12 hours" or "Recent", they mean **the last 12 hours of available data**.
+           - **NEVER** use `NOW()` or `CURRENT_TIMESTAMP`. It will return 0 rows.
+           
+        2. **Column Selection:**
+           - Users/Registration -> use `registration_date`
+           - Trades -> use `trade_datetime`
+           - Deposits/Withdrawals -> use `create_at`
+           - Risk -> use `start_date`
+           - Login/Device -> use `create_at`
+           - **Referrals** (`ads_total_root_...`) -> NO time column. Only Daily Trends allowed.
+           
+        3. **Hourly Query Pattern:**
+           To show hourly trend for the latest day:
+           `SELECT DATE_TRUNC('hour', [time_col]) as hour, COUNT(*) FROM [table] WHERE ds='{latest_ds}' GROUP BY 1 ORDER BY 1`
+
+        4. **General Rules:**
+           - Always filter `ds='{latest_ds}'` for snapshots.
+          
+
         NEW QUESTION: {msg}
         """
 
