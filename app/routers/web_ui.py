@@ -138,14 +138,13 @@ async def chat_endpoint(
 class CustomSQLRequest(BaseModel):
     sql_query: str
 
+
 @router.post("/api/run_custom_sql")
 async def run_custom_sql_endpoint(payload: CustomSQLRequest, current_user: User = Depends(get_current_user)):
     """
-    Simplified entry point for Custom SQL (Bypasses Intent/SQL Agents).
-    Still uses Safety Guard & Visualization Agent.
+    Simplified entry point for Custom SQL.
     """
-    # Use Orchestrator for safety and viz, but skip Intent/SQL Gen
-    from app.pipeline.guardrails.sql_policy import SQLGuard, SQLPolicyException
+    from app.pipeline.guardrails.sql_policy import SQLGuard
     from app.pipeline.agents.visualization import VisualizationAgent
     
     sql = payload.sql_query.strip()
@@ -161,8 +160,6 @@ async def run_custom_sql_endpoint(payload: CustomSQLRequest, current_user: User 
              return {"type": "success", "sql": safe_sql, "data": [], "visual_type": "table"}
 
         # 3. Visualization
-        # Treat Custom SQL as "User Forced Table" unless they explicitly override, 
-        # but for custom SQL usually Table is safest unless aggregated.
         viz_result = await VisualizationAgent.determine_format(df, safe_sql, "Custom SQL Execution")
 
         return {
@@ -170,10 +167,12 @@ async def run_custom_sql_endpoint(payload: CustomSQLRequest, current_user: User 
             "sql": safe_sql,
             "data": df.head(100).to_dict(orient='records'),
             "visual_type": viz_result['type'],
-            "plotly_code": viz_result['code']
+            #CRITICAL FIX: Change ['code'] to .get('data')
+            "plotly_code": viz_result.get('data') 
         }
     except Exception as e:
         return {"type": "error", "message": str(e)}
+
 
 # --- Admin Endpoints ---
 @router.get("/admin/logs", response_class=HTMLResponse)

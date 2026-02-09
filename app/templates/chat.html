@@ -362,18 +362,41 @@
         async function runCustomSQL(id) {
             const textarea = document.getElementById(`sql-${id}`);
             const sql = textarea.value.trim();
-            if(!sql) return;
-            fillInput("Running custom SQL..."); 
+            if (!sql) return;
+            
+            // Find the button relative to the textarea
+            // Structure: details > div > div(absolute) > button
+            const btn = textarea.nextElementSibling.querySelector('button');
+            const originalText = btn.innerText;
+            
+            // UI Feedback (On the button, not the chat input)
+            btn.innerText = "Running...";
+            btn.disabled = true;
+            btn.classList.add("opacity-50", "cursor-not-allowed");
+            
             try {
                 const res = await fetch('/api/run_custom_sql', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify({ sql_query: sql })
                 });
+                
                 const data = await res.json();
-                renderResponse(data);
+                
+                if (data.type === 'error') {
+                    // Show error in a small alert or append system message
+                    appendSystemMessage("SQL Error: " + data.message, "text-red-600");
+                } else {
+                    // Render the new result at the bottom
+                    renderResponse(data);
+                }
             } catch(e) {
-                alert("Error: " + e);
+                alert("Execution Error: " + e);
+            } finally {
+                // Reset Button
+                btn.innerText = originalText;
+                btn.disabled = false;
+                btn.classList.remove("opacity-50", "cursor-not-allowed");
             }
         }
     </script>
