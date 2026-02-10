@@ -36,7 +36,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-LISTS-ONLY-FIX") 
+        print(f"✅ VIZ VERSION: 2026-02-10-NO-BINARY-FINAL") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -88,32 +88,31 @@ class VisualizationAgent:
                     # 2. Convert Y to Numeric (Strip formatting)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. EXTRACT PYTHON LISTS (CRITICAL FIX FOR BINARY DATA)
-                    # Handle X (Dates to Strings)
+                    # 3. CRITICAL: Convert to Standard Python Lists
+                    # This prevents Plotly from optimizing into binary 'bdata' strings
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
-                        x_list = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
+                        # Format dates as strings YYYY-MM-DD
+                        x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
-                        x_list = df[forced_x].tolist()
+                        x_data = df[forced_x].tolist()
                         
-                    # Handle Y (Floats to List)
-                    y_list = df[forced_y].tolist()
+                    y_data = df[forced_y].tolist()
                     
                     # 4. Choose Chart Type
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 5. Build Chart using LISTS (Not DataFrame)
-                    # NOTE: Passing x_list/y_list prevents Plotly from using 'bdata' compression
+                    # 5. Build Chart passing LISTS, NOT DATAFRAME
                     if chart_type == "area":
-                        fig = px.area(x=x_list, y=y_list)
+                        fig = px.area(x=x_data, y=y_data)
                         fig.update_traces(line=dict(color='#2563eb'))
                     elif chart_type == "line":
-                        fig = px.line(x=x_list, y=y_list)
+                        fig = px.line(x=x_data, y=y_data)
                         fig.update_traces(line=dict(color='#2563eb'))
                     else: # Bar
-                        fig = px.bar(x=x_list, y=y_list)
+                        fig = px.bar(x=x_data, y=y_data)
                         fig.update_traces(marker=dict(color='#2563eb'))
                     
-                    # 6. Apply Layout (Re-add titles since lists lost column names)
+                    # 6. Apply Layout (Re-add titles since we lost column names)
                     fig.update_layout(
                         template="plotly_white",
                         margin=dict(l=40, r=40, t=40, b=40),
@@ -124,11 +123,12 @@ class VisualizationAgent:
                     )
                     
                     # 7. Safe Serialization
+                    # Using to_dict() with lists ensures standard JSON output
                     fig_dict = fig.to_dict()
                     return {
                         "visual_type": "plotly", 
                         "plotly_code": VisualizationAgent._make_jsonable(fig_dict), 
-                        "thought": f"Generated Deterministic {chart_type.capitalize()} (Lists)."
+                        "thought": f"Generated Deterministic {chart_type.capitalize()}."
                     }
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
@@ -235,6 +235,7 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
+                # Force standard serialization here as well for the LLM path
                 fig_dict = fig.to_dict()
                 return VisualizationAgent._make_jsonable(fig_dict)
                 
