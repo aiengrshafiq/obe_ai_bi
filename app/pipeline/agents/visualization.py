@@ -2,75 +2,61 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import json
-from app.services.vanna_wrapper import vn
-from datetime import date, datetime, timedelta
-import re
+import numpy as np
 import plotly.io as pio
-
+from datetime import date, datetime, timedelta
+from app.services.vanna_wrapper import vn
 
 class VisualizationAgent:
     """
     Decides format and Executes Plotly code to return JSON.
     Hybrid Engine: Deterministic for simple data, LLM for complex.
     """
+
     @staticmethod
     def _make_jsonable(obj):
-        """
-        Recursively convert Plotly/Pandas/Numpy objects into JSON-serializable types
-        (dict/list/str/int/float/bool/None).
-        """
-        import numpy as np
-        import pandas as pd
-        from datetime import date, datetime
-
-        # Numpy scalars
-        if isinstance(obj, (np.integer,)):
-            return int(obj)
-        if isinstance(obj, (np.floating,)):
-            return float(obj)
-        if isinstance(obj, (np.bool_,)):
-            return bool(obj)
-
-        # Numpy arrays
-        # Numpy arrays
+        """Recursively convert to JSON-safe types."""
+        if isinstance(obj, (np.integer, int)): return int(obj)
+        if isinstance(obj, (np.floating, float)): return float(obj)
+        if isinstance(obj, (np.bool_, bool)): return bool(obj)
+        if isinstance(obj, np.ndarray): return obj.tolist()
+        if isinstance(obj, (pd.Timestamp, datetime, date)): return obj.isoformat()
+        if isinstance(obj, dict): return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)): return [VisualizationAgent._make_jsonable(v) for v in obj]
         if isinstance(obj, np.ndarray):
-            # ✅ IMPORTANT: handle datetime arrays (otherwise becomes 1.77e18)
             if np.issubdtype(obj.dtype, np.datetime64):
                 return [pd.to_datetime(x).isoformat() for x in obj]
             return obj.tolist()
 
-        # ✅ numpy datetime64 scalar
         if isinstance(obj, np.datetime64):
             return pd.to_datetime(obj).isoformat()
-
-        # Pandas timestamps / Python dates
-        if isinstance(obj, (pd.Timestamp, datetime, date)):
-            # ISO string is safest for JSON
-            return obj.isoformat()
-
-        # Dict / list / tuple
-        if isinstance(obj, dict):
-            return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [VisualizationAgent._make_jsonable(v) for v in obj]
-
         return obj
 
     @staticmethod
+    def _choose_chart(df: pd.DataFrame, x_col: str, y_col: str) -> str:
+        """Determines the best chart type based on X-axis data type and density."""
+        # If X is a Date/Time
+        if pd.api.types.is_datetime64_any_dtype(df[x_col]):
+            if len(df) <= 15:
+                return "bar" # Few dates = Bar (easier to read)
+            elif len(df) <= 100:
+                return "line" # Medium trend = Line
+            else:
+                return "area" # Dense history = Area
+        
+        # If X is Categorical (Country, Symbol)
+        return "bar"
+
+    @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-09-GUARDRAIL-C-ACTIVE") # <--- PROOF OF DEPLOYMENT
+        print(f"✅ VIZ VERSION: 2026-02-10-CONTRACT-FIXED") 
         
         if df is None or df.empty:
-            return {"type": "none", "data": None, "thought": "No data found."}
+            return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
 
         # --- GUARDRAIL A: Auto-Clean Data ---
         df = VisualizationAgent._clean_data_for_plotting(df)
         
-        # Debug Prints to Console
-        print(f"[VIZ CHECK] Columns: {df.columns.tolist()}")
-        print(f"[VIZ CHECK] Sample Row: {df.head(1).to_dict(orient='records')}")
-
-        # 1. Profile Data
         row_count = len(df)
         col_count = len(df.columns)
         columns = df.columns.tolist()
@@ -80,13 +66,14 @@ class VisualizationAgent:
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
         print(f"[VIZ CHECK] Forced X: {forced_x}, Forced Y: {forced_y}")
 
-        # 2. Decision Logic
-        
-        # A. KPI (Single Value)
-        if row_count == 1 and col_count < 3:
-            return {"type": "table", "data": None, "thought": "KPI / Single Record."}
+        # 1. KPI (Single Value) - Strict Check
+        # Only if 1 row AND specifically 1 numeric column
+        if row_count == 1:
+            numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+            if len(numeric_cols) == 1 and col_count <= 2:
+                return {"visual_type": "table", "plotly_code": None, "thought": "KPI / Single Record."}
 
-        # B. Funnel Intent (Always LLM)
+        # 2. Funnel Intent (Always LLM)
         if intent_type == 'funnel' or "funnel" in user_question.lower():
             instructions = (
                 f"Data Columns: {columns}. "
@@ -95,42 +82,43 @@ class VisualizationAgent:
             )
             code = await vn.generate_plotly_code_async(instructions, sql, df)
             fig_json = VisualizationAgent._execute_plotly_code(code, df, chart_kind="funnel")
-            return {"type": "plotly", "data": fig_json, "thought": "Detected Funnel intent."}
+            return {"visual_type": "plotly", "plotly_code": fig_json, "thought": "Detected Funnel intent."}
 
-        # C. Trend / Analytics
+        # 3. Trend / Analytics / Comparison
         has_aggregates = any(x in sql.upper() for x in ["GROUP BY", "SUM(", "COUNT(", "AVG(", "MIN(", "MAX("])
         
         if (intent_type == 'trend' or has_aggregates) and row_count > 1:
             if col_count < 2:
-                return {"type": "table", "data": None, "thought": "Insufficient columns."}
-            
-            # Smart Chart Type Selection
-            has_time_col = any(c.lower() in ['ds', 'date', 'day', 'time', 'created_at', 'trade_datetime', 'registration_date', 'hour'] for c in columns)
-            chart_type = "area" if (has_time_col and row_count > 20) else "bar"
+                return {"visual_type": "table", "plotly_code": None, "thought": "Insufficient columns."}
 
             # --- GUARDRAIL C: DETERMINISTIC PLOTTING (NO LLM) ---
-            # This is the "Industry Standard" fix. Don't ask AI to plot 2 columns. Just do it.
             if forced_x and forced_y:
                 try:
                     print("[VIZ CHECK] ⚡ Entering Deterministic Mode (No LLM)")
-                    # 1. Strict Sort
+                    # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Strict Numeric Conversion (Strip commas)
-                    # This handles the '193,880,587.59' string format issue
+                    # 2. Convert Y
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. Build Chart Directly
+                    # 3. Choose Chart Type
+                    chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
+                    
+                    # 4. Build
                     if chart_type == "area":
                         fig = px.area(df, x=forced_x, y=forced_y)
                         fig.update_traces(line=dict(color='#2563eb'))
-                    else:
+                    elif chart_type == "line":
+                        fig = px.line(df, x=forced_x, y=forced_y)
+                        fig.update_traces(line=dict(color='#2563eb'))
+                    else: # Bar
                         fig = px.bar(df, x=forced_x, y=forced_y)
                         fig.update_traces(marker=dict(color='#2563eb'))
                     
-                    fig.update_xaxes(type="date")
+                    if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
+                        fig.update_xaxes(type="date")
                     
-                    # 4. Apply Layout
+                    # 5. Layout
                     fig.update_layout(
                         template="plotly_white",
                         margin=dict(l=40, r=40, t=40, b=40),
@@ -139,19 +127,13 @@ class VisualizationAgent:
                         yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'), 
                         hovermode="x unified"
                     )
-
-                    plotly_dict = json.loads(pio.to_json(fig, validate=False))
+                    
+                    fig_dict = json.loads(pio.to_json(fig, validate=False))
                     return {
-                        "type": "success",
-                        "sql": sql,
-                        "data": df.to_dict(orient="records"),
-                        "visual_type": "plotly",
-                        "plotly_code": plotly_dict,
-                        "thought": "Generated Deterministic Chart (100% Accurate)."
+                        "visual_type": "plotly", 
+                        "plotly_code": VisualizationAgent._make_jsonable(fig_dict), 
+                        "thought": f"Generated Deterministic {chart_type.capitalize()}."
                     }
-                    
-                   
-                    
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
 
@@ -170,58 +152,42 @@ class VisualizationAgent:
             fig_json = VisualizationAgent._execute_plotly_code(code, df, chart_kind="standard")
             
             if fig_json:
-                return {"type": "plotly", "data": fig_json, "thought": "Generated Professional Chart (AI)."}
+                return {"visual_type": "plotly", "plotly_code": fig_json, "thought": "Generated Professional Chart (AI)."}
 
         # D. Fallback
-        return {"type": "table", "data": None, "thought": "Standard data list."}
+        return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-
+    # ... (Keep _clean_data_for_plotting, _force_xy_for_two_columns, _execute_plotly_code EXACTLY as they were in previous version) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.copy()
-
-        date_like_names = {
-            'ds','date','day','time','created_at','trade_datetime',
-            'registration_date','hour','trade_date'
-        }
+        df = df.copy() 
+        date_like_names = {'ds','date','day','time','created_at','trade_datetime','registration_date','hour','trade_date'}
 
         for col in df.columns:
             col_lower = col.lower()
-
-            # ---------- DATE / TIME CONVERSION ----------
-            is_name_date_like = (
-                col_lower in date_like_names
-                or "date" in col_lower
-                or col_lower.endswith("_date")
-                or col_lower.endswith("_dt")
-            )
-
-            if is_name_date_like:
-                # 1) If it's ds-like 'YYYYMMDD', parse with format first
+            
+            # --- Date Conversion ---
+            if col_lower in date_like_names or 'date' in col_lower:
                 try:
-                    s = df[col].astype(str).str.strip()
-                    dt = pd.to_datetime(s, format="%Y%m%d", errors="coerce")
-                    # 2) Fallback to generic parser (handles ISO strings and python date objects)
-                    if dt.isna().all():
-                        dt = pd.to_datetime(df[col], errors="coerce")
-                    df[col] = dt
+                    # Try YYYYMMDD first
+                    df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
+                    # Fallback to generic
+                    if df[col].isna().all():
+                         df[col] = pd.to_datetime(df[col], errors='coerce')
                 except:
                     try:
-                        df[col] = pd.to_datetime(df[col], errors="coerce")
-                    except:
-                        pass
-                continue  # done with date column
-
-            # ---------- NUMERIC CONVERSION ----------
-            try:
-                s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
-                num = pd.to_numeric(s, errors='coerce')
-                # convert only if mostly numeric
-                if num.notna().mean() >= 0.60:
-                    df[col] = num
-            except:
-                pass
-
+                        df[col] = pd.to_datetime(df[col], errors='coerce')
+                    except: pass
+            
+            # --- Numeric Conversion ---
+            else:
+                try:
+                    s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
+                    num = pd.to_numeric(s, errors='coerce')
+                    if num.notna().mean() >= 0.60:
+                        df[col] = num
+                except:
+                    pass
         return df
 
     @staticmethod
@@ -230,8 +196,7 @@ class VisualizationAgent:
             return None, None
 
         cols = list(df.columns)
-        date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','trade_date','hour'}
-        #date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','trade_date'}
+        date_like = {'ds','date','day','time','created_at','trade_datetime','registration_date','hour','trade_date'}
 
         x_candidates = []
         for c in cols:
@@ -257,6 +222,7 @@ class VisualizationAgent:
 
         x_col = x_candidates[0]
         y_col = cols[1] if cols[0] == x_col else cols[0]
+
         return x_col, y_col
 
     @staticmethod
@@ -268,10 +234,9 @@ class VisualizationAgent:
             
             if fig:
                 if chart_kind == "standard":
-                    # Fix: Apply styling generally, but don't crash on invalid props
                     try:
                         fig.update_layout(template="plotly_white")
-                        fig.update_traces(marker_color='#2563eb') # Safer than specific dicts
+                        fig.update_traces(marker_color='#2563eb') 
                     except: pass 
 
                 fig.update_layout(
@@ -281,7 +246,11 @@ class VisualizationAgent:
                     yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'),
                     hovermode="x unified"
                 )
-                return json.loads(pio.to_json(fig, validate=False))
+                
+                # Use helper for safety
+                fig_dict = json.loads(pio.to_json(fig, validate=False))
+                return VisualizationAgent._make_jsonable(fig_dict)
+                
             return None
         except Exception as e:
             print(f"Viz Error: {e}")

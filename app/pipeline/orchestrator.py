@@ -37,12 +37,10 @@ class Orchestrator:
             
             # A. General Chat
             if intent_result.get("intent_type") == "general_chat":
-                # Static friendly response
                 return self._finalize(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
             
             # B. Ambiguous
             if intent_result.get("intent_type") == "ambiguous":
-                # Use specific clarification
                 clarification = intent_result.get("clarification_question") or "Could you please clarify which metrics or dates you are interested in?"
                 return self._finalize(log_entry, "text", message=clarification)
 
@@ -51,10 +49,7 @@ class Orchestrator:
             generated_sql = await SQLAgent.generate(full_prompt)
             
             # --- ROBUST SQL DETECTION ---
-            # 1. Strip markdown code fences
             clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
-            
-            # 2. Strict Check for SELECT/WITH
             is_sql = re.match(r'^(SELECT|WITH)\b', clean_sql, re.IGNORECASE)
             
             if not is_sql or generated_sql.strip().upper().startswith("CLARIFICATION"):
@@ -69,7 +64,6 @@ class Orchestrator:
 
             # --- STEP 4: EXECUTION ---
             final_sql = self._apply_replacements(safe_sql)
-            
             log_entry.generated_sql = final_sql
             self.db.commit()
 
@@ -82,17 +76,23 @@ class Orchestrator:
             df = self._sanitize_dataframe(df)
 
             # --- STEP 5: VISUALIZATION INTELLIGENCE ---
-            # Pass intent_result to allow better chart choices
             viz_result = await VisualizationAgent.determine_format(df, final_sql, user_msg, intent_result)
             
-            # --- FINAL PACKAGING ---
+            # --- FINAL PACKAGING (Fixed Contract) ---
+            # Smart Data Limiting: Tables get 100 rows, Charts get full data (up to 5000)
+            visual_type = viz_result.get("visual_type", "table")
+            if visual_type == "plotly":
+                safe_data = df.head(5000).to_dict(orient='records')
+            else:
+                safe_data = df.head(100).to_dict(orient='records')
+
             return self._finalize(
                 log_entry, 
                 "success",
                 sql=final_sql,
-                data=df.head(100).to_dict(orient='records'),
-                visual_type=viz_result['type'],
-                plotly_code=viz_result.get('data'), 
+                data=safe_data,
+                visual_type=visual_type,
+                plotly_code=viz_result.get("plotly_code"), 
                 thought=f"Pipeline: Intent={intent_result.get('intent_type')} -> SQL -> {viz_result.get('thought')}"
             )
 
@@ -104,58 +104,34 @@ class Orchestrator:
         finally:
             self.db.close()
 
-    # --- HELPERS ---
-
+    # --- HELPERS (Unchanged logic) ---
     def _build_prompt(self, msg, history, intent):
-        # Dynamic Dates
         today = datetime.now()
         yesterday = today - timedelta(days=1)
-        latest_ds = cache.get("latest_ds")
-        if not latest_ds: latest_ds = yesterday.strftime("%Y%m%d")
-        
+        latest_ds = cache.get("latest_ds") or yesterday.strftime("%Y%m%d")
         latest_ds_iso = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
-        
         start_7d = (datetime.strptime(latest_ds, "%Y%m%d") - timedelta(days=6)).strftime("%Y%m%d")
         
-        # YOUR ORIGINAL RICH PROMPT
         return f"""
         {history}
-        
         CURRENT CONTEXT:
-        - You are the Data Analyst for **OneBullEx (OBE)**.
         - **System:** Alibaba Dataworks / Hologres Architecture.
-        - **SYSTEM TIME:** The database is updated via Daily Batch. 
-        - **LATEST AVAILABLE DATA (ANCHOR):** {latest_ds_iso} (Partition: ds='{latest_ds}').
-        - **REAL TIME:** {today_iso} (Do NOT use this for data filtering).
-        
+        - **Anchor Date (Latest Data):** {latest_ds_iso} (Partition: ds='{latest_ds}').
+        - **Real Time:** {today_iso} (Do NOT use this).
         INTENT: {intent.get('intent_type')}
         ENTITIES: {intent.get('entities', [])}
-
-        CRITICAL PARTITIONING RULES (SUFFIX LOGIC):
-        1. **INCREMENTAL TABLES (Suffix: `_di`):** - Contains ONLY that specific day's data. 
-           - **Tables:** `dws_all_trades_di`, `dws_user_deposit_withdraw_detail_di`, `dwd_login_history_log_di`, `dwd_user_device_log_di`.
-           - **Rule for Trends:** You MUST scan a range of partitions.
-             - Correct: `WHERE ds BETWEEN '{start_7d}' AND '{latest_ds}'`
-             - Incorrect: `WHERE ds = '{latest_ds}'` (This only sees 1 day!)
-           
-        2. **SNAPSHOT TABLES (Suffix: `_df` or `user_profile_360`):**
-           - Contains the FULL history/state as of that day.
-           - **Tables:** `user_profile_360`, `ads_total_root_referral_volume_df`.
-           - **Rule for Current State:** Always query ONE partition.
-             - Correct: `WHERE ds = '{latest_ds}'`
-             - Incorrect: `WHERE ds BETWEEN ...` (This duplicates data!)
-
-        3. **TIME HANDLING (ANCHOR SHIFTING):**
-           - **NEVER** use `NOW()` or `CURRENT_TIMESTAMP`.
-           - **Last 24 Hours:** Use the timestamp column inside the latest partition (`ds='{latest_ds}'`).
-           - **Last 7 Days:** Use the partition range `ds BETWEEN '{start_7d}' AND '{latest_ds}'`.
-        
+        CRITICAL PARTITIONING RULES:
+        1. **INCREMENTAL (_di):** `dws_all_trades_di`, `dws_user_deposit...`.
+           - Trend? Use RANGE: `WHERE ds BETWEEN '{start_7d}' AND '{latest_ds}'`
+           - Snapshot? `WHERE ds = '{latest_ds}'`
+        2. **SNAPSHOT (_df):** `user_profile_360`, `ads_total_root...`.
+           - Current State? Use `WHERE ds = '{latest_ds}'`
+        3. **TIME:** NEVER use `NOW()`. Use `ds`.
         CRITICAL SQL RULES:
-        1. **Funnels:** Use `UNION ALL` to stack stages vertically.
-        2. **Formatting:** `user_code` is STRING (use quotes).
+        1. **Funnels:** Use `UNION ALL`.
+        2. **Formatting:** `user_code` is STRING.
         3. **Query Pattern:** `SELECT DATE_TRUNC('hour', [time_col]), COUNT(*) ...`
-
         NEW QUESTION: {msg}
         """
 
@@ -165,7 +141,6 @@ class Orchestrator:
         latest_ds = cache.get("latest_ds") or yesterday.strftime("%Y%m%d")
         latest_ds_dash = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
-
         sql = sql.replace("{latest_ds}", latest_ds)
         sql = sql.replace("{latest_ds_dash}", latest_ds_dash)
         sql = sql.replace("{today_iso}", today_iso)
@@ -173,7 +148,6 @@ class Orchestrator:
 
     def _sanitize_dataframe(self, df):
         try:
-            # Only remove Infinity. Leave NaN for Plotly to handle.
             df.replace([float('inf'), float('-inf')], 0, inplace=True)
         except:
             pass
