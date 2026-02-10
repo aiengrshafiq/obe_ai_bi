@@ -16,7 +16,6 @@ class VisualizationAgent:
 
     @staticmethod
     def _make_jsonable(obj):
-        """Recursively convert Plotly/Pandas/Numpy objects into JSON-safe types."""
         if isinstance(obj, (np.integer, int)): return int(obj)
         if isinstance(obj, (np.floating, float)): return float(obj)
         if isinstance(obj, (np.bool_, bool)): return bool(obj)
@@ -28,10 +27,6 @@ class VisualizationAgent:
 
     @staticmethod
     def _decode_plotly_typed_array(obj):
-        """
-        Recursively finds and converts {"dtype": "...", "bdata": "..."} to standard Python lists.
-        This kills the 'bdata' bug for LLM-generated charts.
-        """
         if isinstance(obj, dict) and "dtype" in obj and "bdata" in obj:
             try:
                 raw = base64.b64decode(obj["bdata"])
@@ -41,7 +36,7 @@ class VisualizationAgent:
                     arr = arr.reshape(obj["shape"])
                 return arr.tolist()
             except Exception:
-                return [] # Fail safe
+                return [] 
 
         if isinstance(obj, dict):
             return {k: VisualizationAgent._decode_plotly_typed_array(v) for k, v in obj.items()}
@@ -51,7 +46,6 @@ class VisualizationAgent:
 
     @staticmethod
     def _choose_chart(df: pd.DataFrame, x_col: str, y_col: str) -> str:
-        """Determines the best chart type based on X-axis data type and density."""
         if pd.api.types.is_datetime64_any_dtype(df[x_col]):
             if len(df) <= 15: return "bar"
             elif len(df) <= 100: return "line"
@@ -60,7 +54,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-MANUAL-JSON-FIX") 
+        print(f"✅ VIZ VERSION: 2026-02-10-HOVER-FIX") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -77,13 +71,13 @@ class VisualizationAgent:
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
         print(f"[VIZ CHECK] Forced X: {forced_x}, Forced Y: {forced_y}")
 
-        # 1. KPI (Single Value)
+        # 1. KPI
         if row_count == 1:
             numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
             if len(numeric_cols) == 1 and col_count <= 2:
                 return {"visual_type": "table", "plotly_code": None, "thought": "KPI / Single Record."}
 
-        # 2. Funnel Intent (Always LLM)
+        # 2. Funnel Intent
         if intent_type == 'funnel' or "funnel" in user_question.lower():
             instructions = (
                 f"Data Columns: {columns}. "
@@ -104,15 +98,15 @@ class VisualizationAgent:
             # --- GUARDRAIL C: DETERMINISTIC PLOTTING (NO LLM) ---
             if forced_x and forced_y:
                 try:
-                    print("[VIZ CHECK] ⚡ Entering Deterministic Mode (Manual JSON Construction)")
+                    print("[VIZ CHECK] ⚡ Entering Deterministic Mode (Manual JSON)")
                     
                     # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Convert Y to Numeric
+                    # 2. Convert Y
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. EXTRACT PYTHON LISTS (Critical for Manual Construction)
+                    # 3. EXTRACT PYTHON LISTS
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
                         x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
@@ -123,14 +117,15 @@ class VisualizationAgent:
                     # 4. Choose Chart Type
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 5. MANUALLY BUILD JSON (Bypasses Plotly Serialization Engine)
+                    # 5. MANUALLY BUILD JSON (Fixes Hover Precision)
                     trace_type = "bar" if chart_type == "bar" else "scatter"
                     
                     trace = {
                         "type": trace_type,
-                        "x": x_data,  # Pure Python List -> Standard JSON Array
-                        "y": y_data,  # Pure Python List -> Standard JSON Array
-                        "hovertemplate": f"{forced_x}=%{{x}}<br>{forced_y}=%{{y}}<extra></extra>",
+                        "x": x_data,
+                        "y": y_data,
+                        # FIX: Using %{y:,.2f} forces full number display with commas
+                        "hovertemplate": f"<b>{forced_x}</b>: %{{x}}<br><b>{forced_y}</b>: %{{y:,.2f}}<extra></extra>",
                         "showlegend": False
                     }
 
@@ -138,7 +133,6 @@ class VisualizationAgent:
                         trace["marker"] = {"color": "#2563eb"}
                         trace["orientation"] = "v"
                     else:
-                        # Line or Area
                         trace["mode"] = "lines"
                         trace["line"] = {"color": "#2563eb"}
                         if chart_type == "area":
@@ -149,15 +143,14 @@ class VisualizationAgent:
                         "margin": {"l": 40, "r": 40, "t": 40, "b": 40},
                         "font": {"family": "Inter, sans-serif", "color": "#475569"},
                         "xaxis": {"showgrid": False, "title": {"text": forced_x}},
-                        "yaxis": {"showgrid": True, "gridcolor": "#f1f5f9", "tickformat": ",.2s", "title": {"text": forced_y}},
+                        "yaxis": {"showgrid": True, "gridcolor": "#f1f5f9", "tickformat": ",.2s", "title": {"text": forced_y}}, 
                         "hovermode": "x unified"
                     }
                     
-                    # Return Standard JSON Dict
                     return {
                         "visual_type": "plotly", 
                         "plotly_code": {"data": [trace], "layout": layout}, 
-                        "thought": f"Generated Deterministic {chart_type.capitalize()} (Manual JSON)."
+                        "thought": f"Generated Deterministic {chart_type.capitalize()}."
                     }
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
@@ -182,7 +175,7 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-    # ... (Keep _clean_data_for_plotting and _force_xy_for_two_columns UNCHANGED) ...
+    # ... (Keep _clean_data_for_plotting, _force_xy_for_two_columns unchanged) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -261,14 +254,9 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
-                # SERIALIZATION FIX FOR LLM PATH
-                # 1. Convert to Plotly JSON Dict (contains binary data)
+                # Use to_plotly_json() + decoder for safe LLM charts
                 fig_dict = fig.to_plotly_json()
-                
-                # 2. Decode Binary Data to Lists
                 clean_dict = VisualizationAgent._decode_plotly_typed_array(fig_dict)
-                
-                # 3. Ensure JSON safety
                 return VisualizationAgent._make_jsonable(clean_dict)
                 
             return None
