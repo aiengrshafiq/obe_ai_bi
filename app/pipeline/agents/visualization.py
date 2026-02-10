@@ -4,6 +4,7 @@ import plotly.express as px
 import json
 import numpy as np
 import plotly.io as pio
+import base64
 from datetime import date, datetime, timedelta
 from app.services.vanna_wrapper import vn
 
@@ -26,6 +27,29 @@ class VisualizationAgent:
         return obj
 
     @staticmethod
+    def _decode_plotly_typed_array(obj):
+        """
+        Recursively finds and converts {"dtype": "...", "bdata": "..."} to standard Python lists.
+        This kills the 'bdata' bug for LLM-generated charts.
+        """
+        if isinstance(obj, dict) and "dtype" in obj and "bdata" in obj:
+            try:
+                raw = base64.b64decode(obj["bdata"])
+                dtype = np.dtype(obj["dtype"])
+                arr = np.frombuffer(raw, dtype=dtype)
+                if "shape" in obj and obj["shape"]:
+                    arr = arr.reshape(obj["shape"])
+                return arr.tolist()
+            except Exception:
+                return [] # Fail safe
+
+        if isinstance(obj, dict):
+            return {k: VisualizationAgent._decode_plotly_typed_array(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [VisualizationAgent._decode_plotly_typed_array(v) for v in obj]
+        return obj
+
+    @staticmethod
     def _choose_chart(df: pd.DataFrame, x_col: str, y_col: str) -> str:
         """Determines the best chart type based on X-axis data type and density."""
         if pd.api.types.is_datetime64_any_dtype(df[x_col]):
@@ -36,7 +60,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-NO-BINARY-FINAL") 
+        print(f"✅ VIZ VERSION: 2026-02-10-MANUAL-JSON-FIX") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -80,18 +104,16 @@ class VisualizationAgent:
             # --- GUARDRAIL C: DETERMINISTIC PLOTTING (NO LLM) ---
             if forced_x and forced_y:
                 try:
-                    print("[VIZ CHECK] ⚡ Entering Deterministic Mode (No LLM)")
+                    print("[VIZ CHECK] ⚡ Entering Deterministic Mode (Manual JSON Construction)")
                     
                     # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Convert Y to Numeric (Strip formatting)
+                    # 2. Convert Y to Numeric
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. CRITICAL: Convert to Standard Python Lists
-                    # This prevents Plotly from optimizing into binary 'bdata' strings
+                    # 3. EXTRACT PYTHON LISTS (Critical for Manual Construction)
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
-                        # Format dates as strings YYYY-MM-DD
                         x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
                         x_data = df[forced_x].tolist()
@@ -101,34 +123,41 @@ class VisualizationAgent:
                     # 4. Choose Chart Type
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 5. Build Chart passing LISTS, NOT DATAFRAME
-                    if chart_type == "area":
-                        fig = px.area(x=x_data, y=y_data)
-                        fig.update_traces(line=dict(color='#2563eb'))
-                    elif chart_type == "line":
-                        fig = px.line(x=x_data, y=y_data)
-                        fig.update_traces(line=dict(color='#2563eb'))
-                    else: # Bar
-                        fig = px.bar(x=x_data, y=y_data)
-                        fig.update_traces(marker=dict(color='#2563eb'))
+                    # 5. MANUALLY BUILD JSON (Bypasses Plotly Serialization Engine)
+                    trace_type = "bar" if chart_type == "bar" else "scatter"
                     
-                    # 6. Apply Layout (Re-add titles since we lost column names)
-                    fig.update_layout(
-                        template="plotly_white",
-                        margin=dict(l=40, r=40, t=40, b=40),
-                        font=dict(family="Inter, sans-serif", color="#475569"),
-                        xaxis=dict(showgrid=False, title=dict(text=forced_x)),
-                        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s', title=dict(text=forced_y)), 
-                        hovermode="x unified"
-                    )
+                    trace = {
+                        "type": trace_type,
+                        "x": x_data,  # Pure Python List -> Standard JSON Array
+                        "y": y_data,  # Pure Python List -> Standard JSON Array
+                        "hovertemplate": f"{forced_x}=%{{x}}<br>{forced_y}=%{{y}}<extra></extra>",
+                        "showlegend": False
+                    }
+
+                    if chart_type == "bar":
+                        trace["marker"] = {"color": "#2563eb"}
+                        trace["orientation"] = "v"
+                    else:
+                        # Line or Area
+                        trace["mode"] = "lines"
+                        trace["line"] = {"color": "#2563eb"}
+                        if chart_type == "area":
+                            trace["fill"] = "tozeroy"
+
+                    layout = {
+                        "template": "plotly_white",
+                        "margin": {"l": 40, "r": 40, "t": 40, "b": 40},
+                        "font": {"family": "Inter, sans-serif", "color": "#475569"},
+                        "xaxis": {"showgrid": False, "title": {"text": forced_x}},
+                        "yaxis": {"showgrid": True, "gridcolor": "#f1f5f9", "tickformat": ",.2s", "title": {"text": forced_y}},
+                        "hovermode": "x unified"
+                    }
                     
-                    # 7. Safe Serialization
-                    # Using to_dict() with lists ensures standard JSON output
-                    fig_dict = fig.to_dict()
+                    # Return Standard JSON Dict
                     return {
                         "visual_type": "plotly", 
-                        "plotly_code": VisualizationAgent._make_jsonable(fig_dict), 
-                        "thought": f"Generated Deterministic {chart_type.capitalize()}."
+                        "plotly_code": {"data": [trace], "layout": layout}, 
+                        "thought": f"Generated Deterministic {chart_type.capitalize()} (Manual JSON)."
                     }
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
@@ -153,6 +182,7 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
+    # ... (Keep _clean_data_for_plotting and _force_xy_for_two_columns UNCHANGED) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -160,8 +190,6 @@ class VisualizationAgent:
 
         for col in df.columns:
             col_lower = col.lower()
-            
-            # --- Date Conversion ---
             if col_lower in date_like_names or 'date' in col_lower:
                 try:
                     df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
@@ -171,8 +199,6 @@ class VisualizationAgent:
                     try:
                         df[col] = pd.to_datetime(df[col], errors='coerce')
                     except: pass
-            
-            # --- Numeric Conversion ---
             else:
                 try:
                     s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
@@ -235,9 +261,15 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
-                # Force standard serialization here as well for the LLM path
-                fig_dict = fig.to_dict()
-                return VisualizationAgent._make_jsonable(fig_dict)
+                # SERIALIZATION FIX FOR LLM PATH
+                # 1. Convert to Plotly JSON Dict (contains binary data)
+                fig_dict = fig.to_plotly_json()
+                
+                # 2. Decode Binary Data to Lists
+                clean_dict = VisualizationAgent._decode_plotly_typed_array(fig_dict)
+                
+                # 3. Ensure JSON safety
+                return VisualizationAgent._make_jsonable(clean_dict)
                 
             return None
         except Exception as e:
