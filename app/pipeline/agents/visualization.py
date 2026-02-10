@@ -15,7 +15,7 @@ class VisualizationAgent:
 
     @staticmethod
     def _make_jsonable(obj):
-        """Recursively convert to JSON-safe types."""
+        """Recursively convert Plotly/Pandas/Numpy objects into JSON-serializable types."""
         if isinstance(obj, (np.integer, int)): return int(obj)
         if isinstance(obj, (np.floating, float)): return float(obj)
         if isinstance(obj, (np.bool_, bool)): return bool(obj)
@@ -23,33 +23,24 @@ class VisualizationAgent:
         if isinstance(obj, (pd.Timestamp, datetime, date)): return obj.isoformat()
         if isinstance(obj, dict): return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
         if isinstance(obj, (list, tuple)): return [VisualizationAgent._make_jsonable(v) for v in obj]
-        if isinstance(obj, np.ndarray):
-            if np.issubdtype(obj.dtype, np.datetime64):
-                return [pd.to_datetime(x).isoformat() for x in obj]
-            return obj.tolist()
-
         if isinstance(obj, np.datetime64):
+            return pd.to_datetime(obj).isoformat()
+        if isinstance(obj, (pd.Timestamp, datetime, date)):
             return pd.to_datetime(obj).isoformat()
         return obj
 
     @staticmethod
     def _choose_chart(df: pd.DataFrame, x_col: str, y_col: str) -> str:
         """Determines the best chart type based on X-axis data type and density."""
-        # If X is a Date/Time
         if pd.api.types.is_datetime64_any_dtype(df[x_col]):
-            if len(df) <= 15:
-                return "bar" # Few dates = Bar (easier to read)
-            elif len(df) <= 100:
-                return "line" # Medium trend = Line
-            else:
-                return "area" # Dense history = Area
-        
-        # If X is Categorical (Country, Symbol)
+            if len(df) <= 15: return "bar"
+            elif len(df) <= 100: return "line"
+            else: return "area"
         return "bar"
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-CONTRACT-FIXED") 
+        print(f"✅ VIZ VERSION: 2026-02-10-FINAL-SERIALIZATION-FIX") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -66,8 +57,7 @@ class VisualizationAgent:
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
         print(f"[VIZ CHECK] Forced X: {forced_x}, Forced Y: {forced_y}")
 
-        # 1. KPI (Single Value) - Strict Check
-        # Only if 1 row AND specifically 1 numeric column
+        # 1. KPI (Single Value)
         if row_count == 1:
             numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
             if len(numeric_cols) == 1 and col_count <= 2:
@@ -84,7 +74,7 @@ class VisualizationAgent:
             fig_json = VisualizationAgent._execute_plotly_code(code, df, chart_kind="funnel")
             return {"visual_type": "plotly", "plotly_code": fig_json, "thought": "Detected Funnel intent."}
 
-        # 3. Trend / Analytics / Comparison
+        # 3. Trend / Analytics
         has_aggregates = any(x in sql.upper() for x in ["GROUP BY", "SUM(", "COUNT(", "AVG(", "MIN(", "MAX("])
         
         if (intent_type == 'trend' or has_aggregates) and row_count > 1:
@@ -95,16 +85,17 @@ class VisualizationAgent:
             if forced_x and forced_y:
                 try:
                     print("[VIZ CHECK] ⚡ Entering Deterministic Mode (No LLM)")
+                    
                     # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Convert Y
+                    # 2. Convert Y (Strip formatting)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
                     # 3. Choose Chart Type
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 4. Build
+                    # 4. Build Chart (Using DataFrame directly)
                     if chart_type == "area":
                         fig = px.area(df, x=forced_x, y=forced_y)
                         fig.update_traces(line=dict(color='#2563eb'))
@@ -117,8 +108,8 @@ class VisualizationAgent:
                     
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
                         fig.update_xaxes(type="date")
-                    
-                    # 5. Layout
+                        
+                    # 5. Apply Layout
                     fig.update_layout(
                         template="plotly_white",
                         margin=dict(l=40, r=40, t=40, b=40),
@@ -128,7 +119,9 @@ class VisualizationAgent:
                         hovermode="x unified"
                     )
                     
-                    fig_dict = json.loads(pio.to_json(fig, validate=False))
+                    # 6. SERIALIZATION FIX: Use to_dict() + sanitizer instead of to_json()
+                    # This prevents the 'bdata' (binary string) issue.
+                    fig_dict = fig.to_dict()
                     return {
                         "visual_type": "plotly", 
                         "plotly_code": VisualizationAgent._make_jsonable(fig_dict), 
@@ -157,7 +150,6 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-    # ... (Keep _clean_data_for_plotting, _force_xy_for_two_columns, _execute_plotly_code EXACTLY as they were in previous version) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -169,9 +161,7 @@ class VisualizationAgent:
             # --- Date Conversion ---
             if col_lower in date_like_names or 'date' in col_lower:
                 try:
-                    # Try YYYYMMDD first
                     df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
-                    # Fallback to generic
                     if df[col].isna().all():
                          df[col] = pd.to_datetime(df[col], errors='coerce')
                 except:
@@ -200,17 +190,12 @@ class VisualizationAgent:
 
         x_candidates = []
         for c in cols:
-            # 1. Name Match
             if c.lower() in date_like:
                 x_candidates.append(c)
                 continue
-            
-            # 2. Type Match (Timestamp OR Date Object)
             if pd.api.types.is_datetime64_any_dtype(df[c]):
                 x_candidates.append(c)
                 continue
-            
-            # 3. Object Check (Is it a datetime.date object?)
             try:
                 first_val = df[c].dropna().iloc[0]
                 if isinstance(first_val, (date, datetime)):
@@ -247,8 +232,8 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
-                # Use helper for safety
-                fig_dict = json.loads(pio.to_json(fig, validate=False))
+                # SERIALIZATION FIX: Use to_dict() + sanitizer
+                fig_dict = fig.to_dict()
                 return VisualizationAgent._make_jsonable(fig_dict)
                 
             return None
