@@ -5,6 +5,8 @@ import json
 from app.services.vanna_wrapper import vn
 from datetime import date, datetime, timedelta
 import re
+import plotly.io as pio
+
 
 class VisualizationAgent:
     """
@@ -137,10 +139,18 @@ class VisualizationAgent:
                         yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'), 
                         hovermode="x unified"
                     )
-                    
-                    plotly_dict = VisualizationAgent._make_jsonable(fig.to_dict())
-                    return {"type": "plotly", "data": plotly_dict, "thought": "Generated Deterministic Chart (100% Accurate)."}
 
+                    plotly_dict = json.loads(pio.to_json(fig, validate=False))
+                    return {
+                        "type": "success",
+                        "sql": sql,
+                        "data": df.to_dict(orient="records"),
+                        "visual_type": "plotly",
+                        "plotly_code": plotly_dict,
+                        "thought": "Generated Deterministic Chart (100% Accurate)."
+                    }
+                    
+                   
                     
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
@@ -271,7 +281,7 @@ class VisualizationAgent:
                     yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'),
                     hovermode="x unified"
                 )
-                return VisualizationAgent._make_jsonable(fig.to_dict())
+                return json.loads(pio.to_json(fig, validate=False))
             return None
         except Exception as e:
             print(f"Viz Error: {e}")
