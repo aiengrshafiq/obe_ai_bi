@@ -15,7 +15,7 @@ class VisualizationAgent:
 
     @staticmethod
     def _make_jsonable(obj):
-        """Recursively convert Plotly/Pandas/Numpy objects into JSON-serializable types."""
+        """Recursively convert Plotly/Pandas/Numpy objects into JSON-safe types."""
         if isinstance(obj, (np.integer, int)): return int(obj)
         if isinstance(obj, (np.floating, float)): return float(obj)
         if isinstance(obj, (np.bool_, bool)): return bool(obj)
@@ -23,15 +23,10 @@ class VisualizationAgent:
         if isinstance(obj, (pd.Timestamp, datetime, date)): return obj.isoformat()
         if isinstance(obj, dict): return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
         if isinstance(obj, (list, tuple)): return [VisualizationAgent._make_jsonable(v) for v in obj]
-        if isinstance(obj, np.datetime64):
-            return pd.to_datetime(obj).isoformat()
-        if isinstance(obj, (pd.Timestamp, datetime, date)):
-            return pd.to_datetime(obj).isoformat()
         return obj
 
     @staticmethod
     def _choose_chart(df: pd.DataFrame, x_col: str, y_col: str) -> str:
-        """Determines the best chart type based on X-axis data type and density."""
         if pd.api.types.is_datetime64_any_dtype(df[x_col]):
             if len(df) <= 15: return "bar"
             elif len(df) <= 100: return "line"
@@ -40,7 +35,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-FINAL-SERIALIZATION-FIX") 
+        print(f"✅ VIZ VERSION: 2026-02-10-NO-BINARY-FIXED") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -57,7 +52,7 @@ class VisualizationAgent:
         forced_x, forced_y = VisualizationAgent._force_xy_for_two_columns(df)
         print(f"[VIZ CHECK] Forced X: {forced_x}, Forced Y: {forced_y}")
 
-        # 1. KPI (Single Value)
+        # 1. KPI
         if row_count == 1:
             numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
             if len(numeric_cols) == 1 and col_count <= 2:
@@ -89,43 +84,49 @@ class VisualizationAgent:
                     # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Convert Y (Strip formatting)
+                    # 2. Convert Y to Float (Clean Strings)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. Choose Chart Type
+                    # 3. CONVERT TO VANILLA LISTS (Prevents 'bdata' Binary Issue)
+                    # Handle X (Dates to Strings)
+                    if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
+                        x_list = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
+                    else:
+                        x_list = df[forced_x].tolist()
+                        
+                    # Handle Y (Floats to List)
+                    y_list = df[forced_y].tolist()
+                    
+                    # 4. Choose Chart
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 4. Build Chart (Using DataFrame directly)
+                    # 5. Build Chart using LISTS (Not DataFrame)
                     if chart_type == "area":
-                        fig = px.area(df, x=forced_x, y=forced_y)
+                        fig = px.area(x=x_list, y=y_list)
                         fig.update_traces(line=dict(color='#2563eb'))
                     elif chart_type == "line":
-                        fig = px.line(df, x=forced_x, y=forced_y)
+                        fig = px.line(x=x_list, y=y_list)
                         fig.update_traces(line=dict(color='#2563eb'))
                     else: # Bar
-                        fig = px.bar(df, x=forced_x, y=forced_y)
+                        fig = px.bar(x=x_list, y=y_list)
                         fig.update_traces(marker=dict(color='#2563eb'))
                     
-                    if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
-                        fig.update_xaxes(type="date")
-                        
-                    # 5. Apply Layout
+                    # 6. Apply Layout (Re-add titles manually)
                     fig.update_layout(
                         template="plotly_white",
                         margin=dict(l=40, r=40, t=40, b=40),
                         font=dict(family="Inter, sans-serif", color="#475569"),
-                        xaxis=dict(showgrid=False, title=None),
-                        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s'), 
+                        xaxis=dict(showgrid=False, title=dict(text=forced_x)),
+                        yaxis=dict(showgrid=True, gridcolor='#f1f5f9', tickformat=',.2s', title=dict(text=forced_y)), 
                         hovermode="x unified"
                     )
                     
-                    # 6. SERIALIZATION FIX: Use to_dict() + sanitizer instead of to_json()
-                    # This prevents the 'bdata' (binary string) issue.
+                    # 7. Safe Serialization (to_dict + make_jsonable)
                     fig_dict = fig.to_dict()
                     return {
                         "visual_type": "plotly", 
                         "plotly_code": VisualizationAgent._make_jsonable(fig_dict), 
-                        "thought": f"Generated Deterministic {chart_type.capitalize()}."
+                        "thought": f"Generated Deterministic {chart_type.capitalize()} (Fixed Lists)."
                     }
                 except Exception as e:
                     print(f"[VIZ ERROR] Deterministic Plot Failed: {e}. Falling back to LLM.")
@@ -150,6 +151,7 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
+    # ... (Keep _clean_data_for_plotting, _force_xy_for_two_columns, _execute_plotly_code UNCHANGED) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -157,8 +159,6 @@ class VisualizationAgent:
 
         for col in df.columns:
             col_lower = col.lower()
-            
-            # --- Date Conversion ---
             if col_lower in date_like_names or 'date' in col_lower:
                 try:
                     df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
@@ -168,8 +168,6 @@ class VisualizationAgent:
                     try:
                         df[col] = pd.to_datetime(df[col], errors='coerce')
                     except: pass
-            
-            # --- Numeric Conversion ---
             else:
                 try:
                     s = df[col].astype(str).str.replace(',', '', regex=False).str.strip()
@@ -232,7 +230,7 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
-                # SERIALIZATION FIX: Use to_dict() + sanitizer
+                # Fixed Serialization for LLM path too
                 fig_dict = fig.to_dict()
                 return VisualizationAgent._make_jsonable(fig_dict)
                 
