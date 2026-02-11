@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     
     # B. Auto-Train Knowledge Base (Smart Training)
     try:
-        await train_vanna_on_startup(force_retrain=False)
+        await train_vanna_on_startup(force_retrain=True)
     except Exception as e:
         print(f"⚠️ Warning: Knowledge Base training failed. System will run with existing data. {e}")
 
