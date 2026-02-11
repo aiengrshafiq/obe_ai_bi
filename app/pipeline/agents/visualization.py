@@ -19,8 +19,6 @@ class VisualizationAgent:
         """Recursively convert objects to JSON-safe types and clean NaN/Inf."""
         if obj is None:
             return None
-            
-        # Handle Numeric Types (Clean NaN/Inf -> None)
         if isinstance(obj, (np.floating, float)):
             if np.isnan(obj) or np.isinf(obj):
                 return None
@@ -29,21 +27,14 @@ class VisualizationAgent:
             return int(obj)
         if isinstance(obj, (np.bool_, bool)):
             return bool(obj)
-            
-        # Handle Arrays/Lists
         if isinstance(obj, np.ndarray):
             return VisualizationAgent._make_jsonable(obj.tolist())
         if isinstance(obj, (list, tuple)):
             return [VisualizationAgent._make_jsonable(v) for v in obj]
-            
-        # Handle Dicts
         if isinstance(obj, dict):
             return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
-            
-        # Handle Dates
         if isinstance(obj, (pd.Timestamp, datetime, date)):
             return obj.isoformat()
-            
         return obj
 
     @staticmethod
@@ -76,7 +67,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-11-NAN-FIX") 
+        print(f"✅ VIZ VERSION: 2026-02-11-FINAL-PROD") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -127,13 +118,13 @@ class VisualizationAgent:
                     # Convert Y to Numeric (Force NaN on errors)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # EXTRACT LISTS (Clean NaNs to None manually just in case)
+                    # EXTRACT LISTS
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
                         x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
                         x_data = df[forced_x].tolist()
                         
-                    # Handle Y data with explicit None replacement for NaNs
+                    # Handle Y data (convert NaN to None for JSON safety)
                     y_data = df[forced_y].where(pd.notnull(df[forced_y]), None).tolist()
                     
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
@@ -167,9 +158,11 @@ class VisualizationAgent:
                         "hovermode": "x unified"
                     }
                     
+                    final_payload = {"data": [trace], "layout": layout}
+                    # Sanitize before returning to be safe
                     return {
                         "visual_type": "plotly", 
-                        "plotly_code": {"data": [trace], "layout": layout}, 
+                        "plotly_code": VisualizationAgent._make_jsonable(final_payload), 
                         "thought": f"Generated Deterministic {chart_type.capitalize()}."
                     }
                 except Exception as e:
@@ -195,7 +188,7 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-    # ... (Keep _clean_data_for_plotting and _force_xy_for_two_columns UNCHANGED) ...
+    # ... (Rest of the static methods remain unchanged) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 

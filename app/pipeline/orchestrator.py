@@ -1,5 +1,7 @@
 import pandas as pd
-from datetime import datetime, timedelta
+import numpy as np
+import math
+from datetime import datetime, date, timedelta
 from typing import Dict, Any
 import re
 
@@ -22,6 +24,26 @@ class Orchestrator:
         self.user = user
         self.db = SessionLocal() # For logging
 
+    def _json_safe(self, obj):
+        """
+        Global safety net. Ensures NO NaN, Inf, or weird types escape to the API.
+        """
+        if obj is None or obj is pd.NaT:
+            return None
+        if isinstance(obj, (pd.Timestamp, datetime, date)):
+            return obj.isoformat()
+        if isinstance(obj, np.generic):
+            return self._json_safe(obj.item())
+        if isinstance(obj, float):
+            return None if (math.isnan(obj) or math.isinf(obj)) else obj
+        if isinstance(obj, (int, bool, str)):
+            return obj
+        if isinstance(obj, dict):
+            return {str(k): self._json_safe(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [self._json_safe(v) for v in obj]
+        return str(obj)
+
     async def run_pipeline(self, user_msg: str, history_context: str) -> Dict[str, Any]:
         """
         Executes the full Intelligence Pipeline.
@@ -37,12 +59,12 @@ class Orchestrator:
             
             # A. General Chat
             if intent_result.get("intent_type") == "general_chat":
-                return self._finalize(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
+                return self._finalize_safe(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
             
             # B. Ambiguous
             if intent_result.get("intent_type") == "ambiguous":
                 clarification = intent_result.get("clarification_question") or "Could you please clarify which metrics or dates you are interested in?"
-                return self._finalize(log_entry, "text", message=clarification)
+                return self._finalize_safe(log_entry, "text", message=clarification)
 
             # --- STEP 2: SQL GENERATION ---
             full_prompt = self._build_prompt(user_msg, history_context, intent_result)
@@ -54,13 +76,13 @@ class Orchestrator:
             
             if not is_sql or generated_sql.strip().upper().startswith("CLARIFICATION"):
                 clean_msg = generated_sql.replace("CLARIFICATION:", "").strip()
-                return self._finalize(log_entry, "text", message=clean_msg)
+                return self._finalize_safe(log_entry, "text", message=clean_msg)
 
             # --- STEP 3: SAFETY GATE ---
             try:
                 safe_sql = SQLGuard.validate_and_fix(clean_sql)
             except SQLPolicyException as e:
-                return self._finalize(log_entry, "error", message=f"Security Block: {str(e)}")
+                return self._finalize_safe(log_entry, "error", message=f"Security Block: {str(e)}")
 
             # --- STEP 4: EXECUTION ---
             final_sql = self._apply_replacements(safe_sql)
@@ -70,25 +92,23 @@ class Orchestrator:
             df = await vn.run_sql_async(final_sql)
             
             if df is None or df.empty:
-                return self._finalize(log_entry, "success", sql=final_sql, message="No data found.", data=[])
+                return self._finalize_safe(log_entry, "success", sql=final_sql, message="No data found.", data=[])
 
-            # Smarter Sanitization (No fillna(0)!)
+            # Smarter Sanitization (NaN stays NaN here, handled by _json_safe later)
             df = self._sanitize_dataframe(df)
 
             # --- STEP 5: VISUALIZATION INTELLIGENCE ---
             viz_result = await VisualizationAgent.determine_format(df, final_sql, user_msg, intent_result)
             
             # --- FINAL PACKAGING ---
-            # FIX: Replace NaN/Inf with None to prevent 500 Errors
-            df_safe = df.where(pd.notnull(df), None)
-            
+            # Data Limiting: Tables get 100 rows, Charts get up to 5000
             visual_type = viz_result.get("visual_type", "table")
             if visual_type == "plotly":
-                safe_data = df_safe.head(5000).to_dict(orient='records')
+                safe_data = df.head(5000).to_dict(orient='records')
             else:
-                safe_data = df_safe.head(100).to_dict(orient='records')
+                safe_data = df.head(100).to_dict(orient='records')
 
-            return self._finalize(
+            result = self._finalize(
                 log_entry, 
                 "success",
                 sql=final_sql,
@@ -97,16 +117,19 @@ class Orchestrator:
                 plotly_code=viz_result.get("plotly_code"), 
                 thought=f"Pipeline: Intent={intent_result.get('intent_type')} -> SQL -> {viz_result.get('thought')}"
             )
+            
+            # THE GLOBAL SAFETY NET
+            return self._json_safe(result)
 
         except Exception as e:
             print(f"Orchestrator Error: {e}")
             import traceback
             traceback.print_exc()
-            return self._finalize(log_entry, "error", message="An internal error occurred.")
+            return self._finalize_safe(log_entry, "error", message="An internal error occurred.")
         finally:
             self.db.close()
 
-    # --- HELPERS (Keep existing) ---
+    # --- HELPERS ---
     def _build_prompt(self, msg, history, intent):
         today = datetime.now()
         yesterday = today - timedelta(days=1)
@@ -149,8 +172,9 @@ class Orchestrator:
         return sql
 
     def _sanitize_dataframe(self, df):
+        # Improved: Replace Inf with NaN (not 0) so JSON sanitizer can handle it
         try:
-            df.replace([float('inf'), float('-inf')], 0, inplace=True)
+            df.replace([np.inf, -np.inf], np.nan, inplace=True)
         except:
             pass
         return df
@@ -162,3 +186,8 @@ class Orchestrator:
             log_entry.error_message = kwargs.get("message", "Unknown Error")
         self.db.commit()
         return {"type": status_type, **kwargs}
+
+    def _finalize_safe(self, log_entry, status_type, **kwargs):
+        # Helper to wrap finalize in json_safe for early exits
+        res = self._finalize(log_entry, status_type, **kwargs)
+        return self._json_safe(res)
