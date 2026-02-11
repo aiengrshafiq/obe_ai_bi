@@ -67,7 +67,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-11-FINAL-PROD") 
+        print(f"✅ VIZ VERSION: 2026-02-11-CLEANING-FIX") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -118,13 +118,13 @@ class VisualizationAgent:
                     # Convert Y to Numeric (Force NaN on errors)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # EXTRACT LISTS
+                    # EXTRACT LISTS (Clean NaNs to None manually just in case)
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
                         x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
                         x_data = df[forced_x].tolist()
                         
-                    # Handle Y data (convert NaN to None for JSON safety)
+                    # Handle Y data with explicit None replacement for NaNs
                     y_data = df[forced_y].where(pd.notnull(df[forced_y]), None).tolist()
                     
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
@@ -159,10 +159,11 @@ class VisualizationAgent:
                     }
                     
                     final_payload = {"data": [trace], "layout": layout}
-                    # Sanitize before returning to be safe
+                    safe_payload = VisualizationAgent._make_jsonable(final_payload)
+                    
                     return {
                         "visual_type": "plotly", 
-                        "plotly_code": VisualizationAgent._make_jsonable(final_payload), 
+                        "plotly_code": safe_payload, 
                         "thought": f"Generated Deterministic {chart_type.capitalize()}."
                     }
                 except Exception as e:
@@ -188,7 +189,6 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-    # ... (Rest of the static methods remain unchanged) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -198,9 +198,15 @@ class VisualizationAgent:
             col_lower = col.lower()
             if col_lower in date_like_names or 'date' in col_lower:
                 try:
-                    df[col] = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
-                    if df[col].isna().all():
+                    # FIX: Use temporary variable to avoid overwriting data with NaT on partial failure
+                    temp = pd.to_datetime(df[col].astype(str), format='%Y%m%d', errors='coerce')
+                    
+                    if temp.isna().all():
+                         # Fallback: Parse ORIGINAL data with generic parser
                          df[col] = pd.to_datetime(df[col], errors='coerce')
+                    else:
+                         # Success: Use the specific format
+                         df[col] = temp
                 except:
                     try:
                         df[col] = pd.to_datetime(df[col], errors='coerce')
