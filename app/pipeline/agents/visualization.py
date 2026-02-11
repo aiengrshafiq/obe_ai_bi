@@ -16,17 +16,39 @@ class VisualizationAgent:
 
     @staticmethod
     def _make_jsonable(obj):
-        if isinstance(obj, (np.integer, int)): return int(obj)
-        if isinstance(obj, (np.floating, float)): return float(obj)
-        if isinstance(obj, (np.bool_, bool)): return bool(obj)
-        if isinstance(obj, np.ndarray): return obj.tolist()
-        if isinstance(obj, (pd.Timestamp, datetime, date)): return obj.isoformat()
-        if isinstance(obj, dict): return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)): return [VisualizationAgent._make_jsonable(v) for v in obj]
+        """Recursively convert objects to JSON-safe types and clean NaN/Inf."""
+        if obj is None:
+            return None
+            
+        # Handle Numeric Types (Clean NaN/Inf -> None)
+        if isinstance(obj, (np.floating, float)):
+            if np.isnan(obj) or np.isinf(obj):
+                return None
+            return float(obj)
+        if isinstance(obj, (np.integer, int)):
+            return int(obj)
+        if isinstance(obj, (np.bool_, bool)):
+            return bool(obj)
+            
+        # Handle Arrays/Lists
+        if isinstance(obj, np.ndarray):
+            return VisualizationAgent._make_jsonable(obj.tolist())
+        if isinstance(obj, (list, tuple)):
+            return [VisualizationAgent._make_jsonable(v) for v in obj]
+            
+        # Handle Dicts
+        if isinstance(obj, dict):
+            return {k: VisualizationAgent._make_jsonable(v) for k, v in obj.items()}
+            
+        # Handle Dates
+        if isinstance(obj, (pd.Timestamp, datetime, date)):
+            return obj.isoformat()
+            
         return obj
 
     @staticmethod
     def _decode_plotly_typed_array(obj):
+        """Recursively finds and converts {'dtype': '...', 'bdata': '...'} to lists."""
         if isinstance(obj, dict) and "dtype" in obj and "bdata" in obj:
             try:
                 raw = base64.b64decode(obj["bdata"])
@@ -54,7 +76,7 @@ class VisualizationAgent:
 
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
-        print(f"✅ VIZ VERSION: 2026-02-10-HOVER-FIX") 
+        print(f"✅ VIZ VERSION: 2026-02-11-NAN-FIX") 
         
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
@@ -100,31 +122,29 @@ class VisualizationAgent:
                 try:
                     print("[VIZ CHECK] ⚡ Entering Deterministic Mode (Manual JSON)")
                     
-                    # 1. Sort
                     df = df.sort_values(by=forced_x)
                     
-                    # 2. Convert Y
+                    # Convert Y to Numeric (Force NaN on errors)
                     df[forced_y] = pd.to_numeric(df[forced_y].astype(str).str.replace(',', ''), errors='coerce')
                     
-                    # 3. EXTRACT PYTHON LISTS
+                    # EXTRACT LISTS (Clean NaNs to None manually just in case)
                     if pd.api.types.is_datetime64_any_dtype(df[forced_x]):
                         x_data = df[forced_x].dt.strftime('%Y-%m-%d').tolist()
                     else:
                         x_data = df[forced_x].tolist()
                         
-                    y_data = df[forced_y].tolist()
+                    # Handle Y data with explicit None replacement for NaNs
+                    y_data = df[forced_y].where(pd.notnull(df[forced_y]), None).tolist()
                     
-                    # 4. Choose Chart Type
                     chart_type = VisualizationAgent._choose_chart(df, forced_x, forced_y)
                     
-                    # 5. MANUALLY BUILD JSON (Fixes Hover Precision)
+                    # Manual Chart Construction
                     trace_type = "bar" if chart_type == "bar" else "scatter"
                     
                     trace = {
                         "type": trace_type,
                         "x": x_data,
                         "y": y_data,
-                        # FIX: Using %{y:,.2f} forces full number display with commas
                         "hovertemplate": f"<b>{forced_x}</b>: %{{x}}<br><b>{forced_y}</b>: %{{y:,.2f}}<extra></extra>",
                         "showlegend": False
                     }
@@ -175,7 +195,7 @@ class VisualizationAgent:
         # D. Fallback
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data list."}
 
-    # ... (Keep _clean_data_for_plotting, _force_xy_for_two_columns unchanged) ...
+    # ... (Keep _clean_data_for_plotting and _force_xy_for_two_columns UNCHANGED) ...
     @staticmethod
     def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy() 
@@ -254,7 +274,6 @@ class VisualizationAgent:
                     hovermode="x unified"
                 )
                 
-                # Use to_plotly_json() + decoder for safe LLM charts
                 fig_dict = fig.to_plotly_json()
                 clean_dict = VisualizationAgent._decode_plotly_typed_array(fig_dict)
                 return VisualizationAgent._make_jsonable(clean_dict)

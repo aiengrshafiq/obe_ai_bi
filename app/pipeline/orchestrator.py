@@ -78,13 +78,15 @@ class Orchestrator:
             # --- STEP 5: VISUALIZATION INTELLIGENCE ---
             viz_result = await VisualizationAgent.determine_format(df, final_sql, user_msg, intent_result)
             
-            # --- FINAL PACKAGING (Fixed Contract) ---
-            # Smart Data Limiting: Tables get 100 rows, Charts get full data (up to 5000)
+            # --- FINAL PACKAGING ---
+            # FIX: Replace NaN/Inf with None to prevent 500 Errors
+            df_safe = df.where(pd.notnull(df), None)
+            
             visual_type = viz_result.get("visual_type", "table")
             if visual_type == "plotly":
-                safe_data = df.head(5000).to_dict(orient='records')
+                safe_data = df_safe.head(5000).to_dict(orient='records')
             else:
-                safe_data = df.head(100).to_dict(orient='records')
+                safe_data = df_safe.head(100).to_dict(orient='records')
 
             return self._finalize(
                 log_entry, 
@@ -104,7 +106,7 @@ class Orchestrator:
         finally:
             self.db.close()
 
-    # --- HELPERS (Unchanged logic) ---
+    # --- HELPERS (Keep existing) ---
     def _build_prompt(self, msg, history, intent):
         today = datetime.now()
         yesterday = today - timedelta(days=1)
