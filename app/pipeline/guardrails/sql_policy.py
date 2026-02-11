@@ -8,7 +8,7 @@ class SQLPolicyException(Exception):
 class SQLGuard:
     """
     Production-grade SQL Validator using AST parsing.
-    Enforces: Read-Only, Row Limits, No prohibited functions.
+    Enforces: Read-Only, Row Limits (Smart), No prohibited functions.
     """
     
     FORBIDDEN_COMMANDS = {
@@ -16,7 +16,6 @@ class SQLGuard:
         "TRUNCATE", "CREATE", "REPLACE", "MERGE", "CALL", "EXPLAIN"
     }
     
-    # Block sleep/system functions to prevent DoS
     FORBIDDEN_FUNCTIONS = {
         "PG_SLEEP", "PG_TERMINATE_BACKEND", "VERSION", "CURRENT_USER", "DBLINK"
     }
@@ -24,11 +23,9 @@ class SQLGuard:
     @staticmethod
     def validate_and_fix(sql: str) -> str:
         """
-        Parses SQL, checks rules, and injects LIMIT if missing.
-        Returns the sanitized SQL string.
+        Parses SQL, checks rules, and injects LIMIT only for non-aggregated queries.
         """
         try:
-            # Parse SQL into AST (Abstract Syntax Tree)
             parsed = sqlglot.parse_one(sql)
         except Exception as e:
             raise SQLPolicyException(f"Invalid SQL syntax: {str(e)}")
@@ -37,37 +34,42 @@ class SQLGuard:
         if not isinstance(parsed, (exp.Select, exp.Union, exp.With)):
             raise SQLPolicyException("Security Alert: Only SELECT statements are allowed.")
 
-        # 2. Walk the tree to find forbidden commands/functions
+        # 2. Walk the tree for Security Checks & Aggregation Detection
+        has_aggregation = False
+        
+        # Check if there is a GROUP BY clause immediately
+        if parsed.args.get("group"):
+            has_aggregation = True
+
         for node in parsed.walk():
-            # Check for forbidden commands (nested)
+            # Security: Check for forbidden commands
             if isinstance(node, exp.Command):
                 raise SQLPolicyException("Security Alert: System commands are forbidden.")
             
-            # Check for forbidden functions
+            # Security: Check for forbidden functions
             if isinstance(node, exp.Func):
                 func_name = node.sql().split('(')[0].upper()
-                if func_name in ["NOW", "CURRENT_TIMESTAMP", "LOCALTIMESTAMP"]:
-                     pass # In Phase 2, we can auto-replace this with '2026-02-08'. For now, let the prompt handle it.
-                     
                 if func_name in SQLGuard.FORBIDDEN_FUNCTIONS:
                     raise SQLPolicyException(f"Security Alert: Function '{func_name}' is banned.")
+                
+                # Logic: Check for aggregate functions
+                if func_name in {"SUM", "COUNT", "AVG", "MIN", "MAX", "STDDEV", "VARIANCE"}:
+                    has_aggregation = True
 
-        # 3. Enforce Row Limits (The "Cost" Guard)
-        # We check if there is a 'limit' expression in the query
+        # 3. Smart Limit Injection
+        # Only force LIMIT if it's a RAW data query (No aggregation/group by)
         limit_node = parsed.args.get("limit")
         
         if not limit_node:
-            # .limit() returns a new expression with the limit applied
-            parsed = parsed.limit(100)
+            if not has_aggregation:
+                # Raw data -> Force Safety Limit
+                parsed = parsed.limit(100)
+            else:
+                # Aggregation -> Allow full result (Trend lines need all points)
+                pass 
         else:
-            # Optional: If limit exists but is too high (e.g. 1,000,000), cap it
-            # current_limit = int(limit_node.expression.this)
-            # if current_limit > 1000:
-            #     parsed = parsed.limit(1000)
+            # If User/LLM provided a limit, we generally trust it, 
+            # but we could clamp it here if needed (e.g. max 5000).
             pass
 
         return parsed.sql()
-
-# Usage Example:
-# safe_sql = SQLGuard.validate_and_fix("SELECT * FROM users")
-# print(safe_sql) # -> SELECT * FROM users LIMIT 100

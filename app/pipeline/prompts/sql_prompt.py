@@ -27,7 +27,7 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
        - *Examples:* `user_profile_360`, `ads_total_root_referral_volume_df`.
        - **Strategy:** These tables contain the FULL history/state in every single partition.
        - **CRITICAL RULE:** 1. Always filter `ds = '{latest_ds}'` to get the latest snapshot.
-         2. **DO NOT** add extra date filters (like `registration_date >= ...`) unless the user explicitly asks for a specific time range (e.g. "last 7 days").
+         2. **DO NOT** add extra date filters (like `registration_date >= ...`) unless the user explicitly asks for a specific time range.
          3. **DO NOT** use `ds BETWEEN` or `ds <=`.
        
        - **Correct Pattern:**
@@ -41,6 +41,8 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
     1. **Funnels:** Use `UNION ALL`.
     2. **Formatting:** `user_code` is STRING.
     3. **Query Pattern:** `SELECT DATE_TRUNC('hour', [time_col]), COUNT(*) ...`
+    4. **LIMITS:** - **Do NOT** use `LIMIT` for Trend/Aggregation queries (Group By). The system handles large datasets automatically.
+       - **Only** use `LIMIT` if listing raw user IDs or transactions (e.g. `LIMIT 100`).
 
     NEW QUESTION: {user_msg}
     """
