@@ -34,8 +34,10 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
          - *User asks:* "Trend of user registration"
          - *SQL:* `SELECT registration_date_only, COUNT(user_code) FROM user_profile_360 WHERE ds = '{latest_ds}' GROUP BY 1 ORDER BY 1`
     
-    3. **TIME HANDLING:**
-       - **NEVER** use `NOW()` or `CURRENT_TIMESTAMP`. Use the partition `ds` or specific date columns.
+     3. **TIME HANDLING:**
+       - **NEVER** use `NOW()`, `CURRENT_TIMESTAMP`, or `INTERVAL 'hours'`.
+       - **Batch Limitation:** If user asks for "Last X Hours", "Today", or "Real Time", assume they mean **Latest Available Daily Data** (`ds='{latest_ds}'`).
+       - User "Last 7 Days" = `'{start_7d}'` to `'{latest_ds}'`.
     
     CRITICAL SQL RULES:
     1. **Funnels:** Use `UNION ALL`.
