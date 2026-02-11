@@ -134,9 +134,19 @@ class Orchestrator:
         today = datetime.now()
         yesterday = today - timedelta(days=1)
         latest_ds = cache.get("latest_ds") or yesterday.strftime("%Y%m%d")
+        # Calculate Start 30 Days (for MAU)
+        latest_date_obj = datetime.strptime(latest_ds, "%Y%m%d")
+        start_30d = (latest_date_obj - timedelta(days=29)).strftime("%Y%m%d")
         latest_ds_dash = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
-        return sql.replace("{latest_ds}", latest_ds).replace("{latest_ds_dash}", latest_ds_dash).replace("{today_iso}", today_iso)
+        # 2. Replace placeholders
+        sql = sql.replace("{latest_ds}", latest_ds)
+        sql = sql.replace("{latest_ds_dash}", latest_ds_dash)
+        sql = sql.replace("{today_iso}", today_iso)
+        sql = sql.replace("{start_30d}", start_30d)  # <--- NEW LINE
+        
+        return sql
+        
 
     def _sanitize_dataframe(self, df):
         try: df.replace([np.inf, -np.inf], np.nan, inplace=True)

@@ -54,7 +54,7 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 **Critical SQL Rules:**
 1. **The 'Yesterday' Rule (Partitioning):** - You MUST filter by `ds = '{latest_ds}'` for ANY question about "current" status (e.g., "total users", "current balance").
    - Do NOT scan all partitions unless the user explicitly asks for "History" or "Trend".
-2. **Forbidden Tables:** Do NOT hallucinate. You can ONLY query `public.user_profile_360`.
+
 
 **Column Definitions:**
 - **Volume**: Use `total_trade_volume`.
@@ -119,11 +119,11 @@ EXAMPLES = [
     # CASE 3: DAU (Yesterday) & MAU (Monthly)
     # Strategy: Scan the whole month for MAU to get true unique counts
     {
-        "question": "What is DAU for yesterday and MAU for January 2026?",
+        "question": "What is the DAU and MAU?",
         "sql": """
         SELECT 
-            (SELECT COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND is_active_user_7d = 1) as DAU_Yesterday,
-            (SELECT COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE ds BETWEEN '20260101' AND '20260131' AND is_active_user_7d = 1) as MAU_January
+            (SELECT COUNT(DISTINCT user_code) FROM public.dwd_login_history_log_di WHERE ds = '{latest_ds}') as DAU,
+            (SELECT COUNT(DISTINCT user_code) FROM public.dwd_login_history_log_di WHERE ds BETWEEN '{start_30d}' AND '{latest_ds}') as MAU;
         """
     },
 
