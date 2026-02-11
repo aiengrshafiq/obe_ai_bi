@@ -14,6 +14,9 @@ from app.services.vanna_wrapper import vn
 from app.db.app_models import ChatLog, SessionLocal
 from app.services.cache import cache
 
+# --- NEW IMPORT ---
+from app.pipeline.prompts.sql_prompt import get_sql_system_prompt
+
 class Orchestrator:
     """
     The Master Controller.
@@ -22,59 +25,42 @@ class Orchestrator:
     
     def __init__(self, user: str):
         self.user = user
-        self.db = SessionLocal() # For logging
+        self.db = SessionLocal() 
 
     def _json_safe(self, obj):
-        """
-        Global safety net. Ensures NO NaN, Inf, or weird types escape to the API.
-        """
-        if obj is None or obj is pd.NaT:
-            return None
-        if isinstance(obj, (pd.Timestamp, datetime, date)):
-            return obj.isoformat()
-        if isinstance(obj, np.generic):
-            return self._json_safe(obj.item())
-        if isinstance(obj, float):
-            return None if (math.isnan(obj) or math.isinf(obj)) else obj
-        if isinstance(obj, (int, bool, str)):
-            return obj
-        if isinstance(obj, dict):
-            return {str(k): self._json_safe(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [self._json_safe(v) for v in obj]
+        """Global safety net. Ensures NO NaN, Inf, or weird types escape."""
+        if obj is None or obj is pd.NaT: return None
+        if isinstance(obj, (pd.Timestamp, datetime, date)): return obj.isoformat()
+        if isinstance(obj, np.generic): return self._json_safe(obj.item())
+        if isinstance(obj, float): return None if (math.isnan(obj) or math.isinf(obj)) else obj
+        if isinstance(obj, (int, bool, str)): return obj
+        if isinstance(obj, dict): return {str(k): self._json_safe(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)): return [self._json_safe(v) for v in obj]
         return str(obj)
 
     async def run_pipeline(self, user_msg: str, history_context: str) -> Dict[str, Any]:
-        """
-        Executes the full Intelligence Pipeline.
-        """
-        # 1. Log Request
+        """Executes the full Intelligence Pipeline."""
         log_entry = ChatLog(username=self.user, user_question=user_msg, context_provided=history_context)
         self.db.add(log_entry)
         self.db.commit()
 
         try:
-            # --- STEP 1: INTENT CLASSIFICATION ---
+            # --- STEP 1: INTENT ---
             intent_result = await IntentAgent.classify(user_msg)
             
-            # A. General Chat
             if intent_result.get("intent_type") == "general_chat":
                 return self._finalize_safe(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
             
-            # B. Ambiguous
             if intent_result.get("intent_type") == "ambiguous":
                 clarification = intent_result.get("clarification_question") or "Could you please clarify which metrics or dates you are interested in?"
                 return self._finalize_safe(log_entry, "text", message=clarification)
 
-            # --- STEP 2: SQL GENERATION ---
+            # --- STEP 2: SQL GENERATION (Refactored) ---
             full_prompt = self._build_prompt(user_msg, history_context, intent_result)
             generated_sql = await SQLAgent.generate(full_prompt)
             
-            # --- ROBUST SQL DETECTION ---
             clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
-            is_sql = re.match(r'^(SELECT|WITH)\b', clean_sql, re.IGNORECASE)
-            
-            if not is_sql or generated_sql.strip().upper().startswith("CLARIFICATION"):
+            if not re.match(r'^(SELECT|WITH)\b', clean_sql, re.IGNORECASE):
                 clean_msg = generated_sql.replace("CLARIFICATION:", "").strip()
                 return self._finalize_safe(log_entry, "text", message=clean_msg)
 
@@ -94,71 +80,55 @@ class Orchestrator:
             if df is None or df.empty:
                 return self._finalize_safe(log_entry, "success", sql=final_sql, message="No data found.", data=[])
 
-            # Smarter Sanitization (NaN stays NaN here, handled by _json_safe later)
+            # Smarter Sanitization (No fillna(0))
             df = self._sanitize_dataframe(df)
 
-            # --- STEP 5: VISUALIZATION INTELLIGENCE ---
+            # --- STEP 5: VISUALIZATION ---
             viz_result = await VisualizationAgent.determine_format(df, final_sql, user_msg, intent_result)
             
-            # --- FINAL PACKAGING ---
-            # Data Limiting: Tables get 100 rows, Charts get up to 5000
+            # Smart Data Limiting
+            df_safe = df.where(pd.notnull(df), None) # Clean for JSON
             visual_type = viz_result.get("visual_type", "table")
-            if visual_type == "plotly":
-                safe_data = df.head(5000).to_dict(orient='records')
-            else:
-                safe_data = df.head(100).to_dict(orient='records')
+            safe_data = df_safe.head(5000 if visual_type == "plotly" else 100).to_dict(orient='records')
 
             result = self._finalize(
-                log_entry, 
-                "success",
-                sql=final_sql,
-                data=safe_data,
-                visual_type=visual_type,
-                plotly_code=viz_result.get("plotly_code"), 
+                log_entry, "success", sql=final_sql, data=safe_data,
+                visual_type=visual_type, plotly_code=viz_result.get("plotly_code"), 
                 thought=f"Pipeline: Intent={intent_result.get('intent_type')} -> SQL -> {viz_result.get('thought')}"
             )
             
-            # THE GLOBAL SAFETY NET
             return self._json_safe(result)
 
         except Exception as e:
             print(f"Orchestrator Error: {e}")
-            import traceback
-            traceback.print_exc()
+            import traceback; traceback.print_exc()
             return self._finalize_safe(log_entry, "error", message="An internal error occurred.")
         finally:
             self.db.close()
 
     # --- HELPERS ---
     def _build_prompt(self, msg, history, intent):
+        # 1. Calculate Logic
         today = datetime.now()
         yesterday = today - timedelta(days=1)
         latest_ds = cache.get("latest_ds") or yesterday.strftime("%Y%m%d")
+        
+        # 2. Format Strings
         latest_ds_iso = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
         start_7d = (datetime.strptime(latest_ds, "%Y%m%d") - timedelta(days=6)).strftime("%Y%m%d")
         
-        return f"""
-        {history}
-        CURRENT CONTEXT:
-        - **System:** Alibaba Dataworks / Hologres Architecture.
-        - **Anchor Date (Latest Data):** {latest_ds_iso} (Partition: ds='{latest_ds}').
-        - **Real Time:** {today_iso} (Do NOT use this).
-        INTENT: {intent.get('intent_type')}
-        ENTITIES: {intent.get('entities', [])}
-        CRITICAL PARTITIONING RULES:
-        1. **INCREMENTAL (_di):** `dws_all_trades_di`, `dws_user_deposit...`.
-           - Trend? Use RANGE: `WHERE ds BETWEEN '{start_7d}' AND '{latest_ds}'`
-           - Snapshot? `WHERE ds = '{latest_ds}'`
-        2. **SNAPSHOT (_df):** `user_profile_360`, `ads_total_root...`.
-           - Current State? Use `WHERE ds = '{latest_ds}'`
-        3. **TIME:** NEVER use `NOW()`. Use `ds`.
-        CRITICAL SQL RULES:
-        1. **Funnels:** Use `UNION ALL`.
-        2. **Formatting:** `user_code` is STRING.
-        3. **Query Pattern:** `SELECT DATE_TRUNC('hour', [time_col]), COUNT(*) ...`
-        NEW QUESTION: {msg}
-        """
+        # 3. Call External Builder
+        return get_sql_system_prompt(
+            history=history,
+            intent_type=intent.get('intent_type'),
+            entities=intent.get('entities', []),
+            latest_ds=latest_ds,
+            latest_ds_iso=latest_ds_iso,
+            today_iso=today_iso,
+            start_7d=start_7d,
+            user_msg=msg
+        )
 
     def _apply_replacements(self, sql):
         today = datetime.now()
@@ -166,28 +136,18 @@ class Orchestrator:
         latest_ds = cache.get("latest_ds") or yesterday.strftime("%Y%m%d")
         latest_ds_dash = f"{latest_ds[:4]}-{latest_ds[4:6]}-{latest_ds[6:]}"
         today_iso = today.strftime("%Y-%m-%d")
-        sql = sql.replace("{latest_ds}", latest_ds)
-        sql = sql.replace("{latest_ds_dash}", latest_ds_dash)
-        sql = sql.replace("{today_iso}", today_iso)
-        return sql
+        return sql.replace("{latest_ds}", latest_ds).replace("{latest_ds_dash}", latest_ds_dash).replace("{today_iso}", today_iso)
 
     def _sanitize_dataframe(self, df):
-        # Improved: Replace Inf with NaN (not 0) so JSON sanitizer can handle it
-        try:
-            df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        except:
-            pass
+        try: df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        except: pass
         return df
 
     def _finalize(self, log_entry, status_type, **kwargs):
-        if status_type == "success":
-            log_entry.execution_success = True
-        elif status_type == "error":
-            log_entry.error_message = kwargs.get("message", "Unknown Error")
+        if status_type == "success": log_entry.execution_success = True
+        elif status_type == "error": log_entry.error_message = kwargs.get("message", "Unknown Error")
         self.db.commit()
         return {"type": status_type, **kwargs}
 
     def _finalize_safe(self, log_entry, status_type, **kwargs):
-        # Helper to wrap finalize in json_safe for early exits
-        res = self._finalize(log_entry, status_type, **kwargs)
-        return self._json_safe(res)
+        return self._json_safe(self._finalize(log_entry, status_type, **kwargs))
