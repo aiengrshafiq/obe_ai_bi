@@ -26,14 +26,16 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
     2. **SNAPSHOT TABLES (Suffix `_df` OR `user_profile_360`):**
        - *Examples:* `user_profile_360`, `ads_total_root_referral_volume_df`.
        - **Strategy:** These tables contain the FULL history/state in every single partition.
-       - **CRITICAL RULE:** NEVER scan a range of partitions (ds BETWEEN...) for these tables. It will cause massive duplicates.
-       - **Correct Pattern:** Always filter `ds = '{latest_ds}'` to get the latest snapshot, then use date columns (like `registration_date`) for history.
-         - *Wrong:* `SELECT ... FROM user_profile_360 WHERE ds BETWEEN ...`
-         - *Right:* `SELECT ... FROM user_profile_360 WHERE ds = '{latest_ds}' AND registration_date >= '{start_7d}'`
+       - **CRITICAL RULE:** 1. Always filter `ds = '{latest_ds}'` to get the latest snapshot.
+         2. **DO NOT** add extra date filters (like `registration_date >= ...`) unless the user explicitly asks for a specific time range (e.g. "last 7 days").
+         3. **DO NOT** use `ds BETWEEN` or `ds <=`.
+       
+       - **Correct Pattern:**
+         - *User asks:* "Trend of user registration"
+         - *SQL:* `SELECT registration_date_only, COUNT(user_code) FROM user_profile_360 WHERE ds = '{latest_ds}' GROUP BY 1 ORDER BY 1`
     
     3. **TIME HANDLING:**
        - **NEVER** use `NOW()` or `CURRENT_TIMESTAMP`. Use the partition `ds` or specific date columns.
-       - User "Last 7 Days" = `'{start_7d}'` to `'{latest_ds}'`.
     
     CRITICAL SQL RULES:
     1. **Funnels:** Use `UNION ALL`.
