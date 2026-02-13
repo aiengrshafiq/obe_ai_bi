@@ -394,13 +394,25 @@
             
             data.slice(0, 10).forEach((row, idx) => {
                 const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-                rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">` + 
-                        Object.values(row).map(v => {
-                            let displayVal = v;
-                            if (typeof v === 'number') displayVal = formatNumber(v);
-                            return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal}</td>`;
-                        }).join('') + 
-                        `</tr>`;
+                
+                // Map over values, but use the INDEX to look up the header name
+                const cells = Object.values(row).map((v, colIndex) => {
+                    let displayVal = v;
+                    const colName = headers[colIndex].toLowerCase(); // Get column name
+                    
+                    // INTELLIGENT FORMATTING RULE:
+                    // Only add commas if it is a number AND NOT an ID column ('code', 'id')
+                    if (typeof v === 'number') {
+                        if (!colName.includes('code') && !colName.includes('id') && !colName.endsWith('_id')) {
+                            displayVal = formatNumber(v);
+                        }
+                        // If it IS an ID, keep it raw (e.g. 10000047)
+                    }
+                    
+                    return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal}</td>`;
+                }).join('');
+
+                rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">${cells}</tr>`;
             });
             
             return `

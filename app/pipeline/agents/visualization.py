@@ -6,6 +6,13 @@ import re
 import numpy as np
 from app.services.vanna_wrapper import vn
 import asyncio
+import base64
+
+# --- 1. COMPILE REGEX ONCE (Performance) ---
+IDENTIFIER_NAME_RE = re.compile(
+    r"(?:^|_)(id|code|user_code|uid|order_id|request_id|visitor_id|linked_id|address|hash|txid|wallet)(?:$|_)",
+    re.IGNORECASE
+)
 
 class VisualizationAgent:
     """
@@ -15,32 +22,81 @@ class VisualizationAgent:
     """
 
     @staticmethod
-    def _make_jsonable(obj):
-        """Recursively convert objects to JSON-safe types."""
-        if isinstance(obj, (pd.Timestamp, np.datetime64)):
-            return str(obj)
-        if isinstance(obj, (np.integer, int)):
-            return int(obj)
-        if isinstance(obj, (np.floating, float)):
-            return float(obj) if not (np.isnan(obj) or np.isinf(obj)) else None
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return obj
+    def _is_identifier_column(df: pd.DataFrame, col: str) -> bool:
+        """Heuristically detects if a column is an Identifier (not a metric)."""
+        name = col.lower()
 
+        # 1) Name-based (strong signal)
+        if IDENTIFIER_NAME_RE.search(name):
+            return True
+
+        # 2) Data-based (fallback): mostly unique + integer-like strings
+        try:
+            s = df[col].dropna()
+            if len(s) < 5: return False
+            
+            # High uniqueness ratio (>90% unique) is suspicious for a metric
+            uniq_ratio = s.nunique() / len(s)
+            if uniq_ratio > 0.90:
+                # If it looks like integers (even if stored as float/string)
+                s_as_str = s.astype(str)
+                # Check if 80% match digits
+                int_like_ratio = s_as_str.str.fullmatch(r"\d+").mean()
+                if int_like_ratio > 0.80:
+                    return True
+        except:
+            pass
+
+        return False
+
+    @staticmethod
+    def _clean_data_for_plotting(df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Prepares data for plotting:
+        - Forces Identifiers to Strings (prevents plotting them).
+        - Converts valid numerics to Numbers.
+        - Converts dates.
+        """
+        df = df.copy()
+        df = df.reset_index(drop=True) 
+
+        date_like_names = {'ds','date','day','time','created_at','trade_datetime','registration_date','hour','trade_date'}
+
+        for col in df.columns:
+            # ✅ RULE 1: If identifier -> force string (Kill the chart candidate)
+            if VisualizationAgent._is_identifier_column(df, col):
+                df[col] = df[col].astype(str).str.strip()
+                continue
+
+            col_lower = col.lower()
+            
+            # ✅ RULE 2: Date handling
+            if col_lower in date_like_names or 'date' in col_lower:
+                try:
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+                except: pass
+            
+            # ✅ RULE 3: Numeric handling (Only if NOT an identifier)
+            else:
+                try:
+                    # Clean currency symbols if any
+                    s = df[col].astype(str).str.replace(',', '', regex=False).str.replace('$', '', regex=False).str.strip()
+                    num = pd.to_numeric(s, errors='coerce')
+                    # If >60% are valid numbers, treat as numeric
+                    if num.notna().mean() >= 0.60:
+                        df[col] = num
+                except: pass
+
+        return df
 
     @staticmethod
     def _decode_plotly_typed_array(obj):
         """Recursively finds and converts {'dtype': '...', 'bdata': '...'} to lists."""
-        import base64
-        
         if isinstance(obj, dict) and "dtype" in obj and "bdata" in obj:
             try:
-                # Decode binary data
                 raw = base64.b64decode(obj["bdata"])
                 dtype = np.dtype(obj["dtype"])
                 arr = np.frombuffer(raw, dtype=dtype)
-                
-                # Reshape if shape is provided
                 if "shape" in obj and obj["shape"]:
                     arr = arr.reshape(obj["shape"])
                 return arr.tolist()
@@ -53,39 +109,40 @@ class VisualizationAgent:
             return [VisualizationAgent._decode_plotly_typed_array(v) for v in obj]
         return obj
 
-
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
         """
         Main entry point.
-        1. Analyzes Data shape.
-        2. If complex, asks LLM for a JSON Spec.
-        3. Builds Plotly JSON.
         """
         if df is None or df.empty:
             return {"visual_type": "none", "plotly_code": None, "thought": "No data found."}
 
-        # Clean Data
-        df = df.copy()
-        # Convert all date-like columns
-        for col in df.columns:
-            if 'date' in col.lower() or 'time' in col.lower() or col == 'ds':
-                try:
-                    df[col] = pd.to_datetime(df[col])
-                except: pass
+        # 1. Clean & Type the Data
+        df = VisualizationAgent._clean_data_for_plotting(df)
         
         row_count = len(df)
         col_count = len(df.columns)
         columns = df.columns.tolist()
 
-        # --- A. Simple Rules (Fast Path) ---
-        # 1. KPI (Single Value)
+        # 2. KPI Check
         if row_count == 1 and col_count <= 2:
             return {"visual_type": "table", "plotly_code": None, "thought": "KPI / Single Record."}
 
-        # --- B. LLM Chart Logic (JSON Path) ---
-        # We ask the LLM to map columns to axes.
-        
+        # 3. Chartability Gate (Semantic Guardrail)
+        # Identify true metrics (Numeric columns that are NOT identifiers)
+        identifier_cols = [c for c in df.columns if VisualizationAgent._is_identifier_column(df, c)]
+        numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+        measure_cols = [c for c in numeric_cols if c not in identifier_cols]
+
+        # ⛔ HARD STOP: If we have no numbers to plot, force Table.
+        if len(measure_cols) == 0:
+            return {
+                "visual_type": "table", 
+                "plotly_code": None, 
+                "thought": "Data contains identifiers but no plottable metrics. Forcing Table."
+            }
+
+        # 4. LLM Chart Logic
         prompt = f"""
         You are a Data Visualization Expert.
         User Question: "{user_question}"
@@ -98,7 +155,7 @@ class VisualizationAgent:
         Rules:
         1. Choose best 'chart_type': 'bar', 'line', 'pie', 'scatter', 'funnel', 'area'.
         2. Identify 'x_column' (categories/dates) and 'y_column' (values).
-        3. If multiple series (e.g. Buy vs Sell), set 'color_column' or use 'y_columns': ['col1', 'col2'].
+        3. If multiple series, set 'color_column' or use 'y_column': ['col1', 'col2'].
         4. Provide a 'title'.
 
         Response Format (JSON ONLY):
@@ -112,13 +169,9 @@ class VisualizationAgent:
         """
 
         try:
-            # 1. Get JSON from LLM
-            
             response = await asyncio.to_thread(vn.generate_summary, question=prompt, df=df)
             
-            # Clean response to ensure valid JSON
             json_str = response.replace("```json", "").replace("```", "").strip()
-            # Find the first { and last }
             start = json_str.find("{")
             end = json_str.rfind("}") + 1
             if start != -1 and end != -1:
@@ -126,11 +179,9 @@ class VisualizationAgent:
             
             spec = json.loads(json_str)
             
-            # 2. Build Chart Deterministically
             fig = VisualizationAgent._build_plotly_figure(df, spec)
             
             if fig:
-                # FIX: Decode the binary data manually before returning
                 raw_json = json.loads(fig.to_json())
                 clean_json = VisualizationAgent._decode_plotly_typed_array(raw_json)
                 
@@ -143,7 +194,6 @@ class VisualizationAgent:
         except Exception as e:
             print(f"⚠️ Visualization Fallback: {e}")
         
-        # Fallback to Table if anything fails
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data table."}
 
     @staticmethod
@@ -157,16 +207,17 @@ class VisualizationAgent:
         title = spec.get("title", "Data Visualization")
         color = spec.get("color_column")
 
-        # Validate columns exist
         if x and x not in df.columns: return None
-        # Handle Y being a list or string
+        
+        # Ensure Y is valid
         if isinstance(y, list):
-            for col in y:
-                if col not in df.columns: return None
-        elif y and y not in df.columns: return None
+            valid_y = [c for c in y if c in df.columns]
+            if not valid_y: return None
+            y = valid_y
+        elif y and y not in df.columns: 
+            return None
 
         fig = None
-        
         try:
             if chart_type == "bar":
                 fig = px.bar(df, x=x, y=y, color=color, title=title, template="plotly_white")
