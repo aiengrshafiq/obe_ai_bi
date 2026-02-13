@@ -39,6 +39,19 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
        - **Batch Limitation:** If user asks for "Last X Hours", "Today", or "Real Time", assume they mean **Latest Available Daily Data** (`ds='{latest_ds}'`).
        - User "Last 7 Days" = `'{start_7d}'` to `'{latest_ds}'`.
     
+    CRITICAL TREND/HISTORY RULES:
+    1. **The "Recent History" Rule:** If the user asks for a "Trend" or "History" **without a specific date range**, **apply a default filter**:
+      - **Default:** `ds >= '{latest_ds}'::DATE - INTERVAL '90 days'`
+      - **Reason:** Prevent pulling very old data unless explicitly requested.
+
+    2. **Sort Order:**
+      - ALWAYS `ORDER BY [time_column] ASC`.
+      - Charts should flow from Left (Old) → Right (New).
+
+    3. **Limits:**
+      - **Do NOT** use `LIMIT` for trend queries with a date filter.
+      - With the 90-day default, the result is typically small enough (~90 rows). No LIMIT needed.
+
     CRITICAL SQL RULES:
     1. **Funnels:** Use `UNION ALL`.
     2. **Formatting:** `user_code` is STRING.
