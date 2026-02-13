@@ -53,10 +53,13 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
       - With the 90-day default, the result is typically small enough (~90 rows). No LIMIT needed.
 
     CRITICAL SQL RULES:
-    1. **Funnels:** Use `UNION ALL`.
-    2. **Formatting:** `user_code` is STRING.
-    3. **Query Pattern:** `SELECT DATE_TRUNC('hour', [time_col]), COUNT(*) ...`
-    4. **LIMITS:** - **Do NOT** use `LIMIT` for Trend/Aggregation queries (Group By). The system handles large datasets automatically.
+    1. **Type Safety (Crucial):** When joining tables on `user_code`, **ALWAYS cast both sides to TEXT** to avoid type mismatches. 
+       - **Correct:** `ON t.user_code::TEXT = up.user_code::TEXT`
+       - **Wrong:** `ON t.user_code = up.user_code`
+    2. **Formatting:** In `WHERE` clauses, treat `user_code` as a STRING (e.g. `user_code = '10000047'`).
+    3. **Funnels:** Use `UNION ALL`.
+    4. **Query Pattern:** `SELECT DATE_TRUNC('hour', [time_col]), COUNT(*) ...`
+    5. **LIMITS:** - **Do NOT** use `LIMIT` for Trend/Aggregation queries (Group By). The system handles large datasets automatically.
        - **Only** use `LIMIT` if listing raw user IDs or transactions (e.g. `LIMIT 100`).
 
     NEW QUESTION: {user_msg}
