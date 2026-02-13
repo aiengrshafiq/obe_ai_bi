@@ -24,7 +24,8 @@ from app.services.cache import cache
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # --- Dependency: Get DB Session ---
 def get_db():
@@ -41,7 +42,10 @@ async def get_current_user(
     db = Depends(get_db)
 ):
     # 1. Try Header Token (API calls)
-    user = verify_token(token, db)
+    user = None
+    if token:
+        user = verify_token(token, db)
+    
     
     # 2. If Header failed, Try Cookie (Browser navigation)
     if not user:
