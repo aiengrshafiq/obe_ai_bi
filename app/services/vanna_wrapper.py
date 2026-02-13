@@ -30,7 +30,15 @@ class OneBullexVanna(ChromaDB_VectorStore, OpenAI_Chat):
         except Exception as e:
             print(f"Vanna Execution Failed: {e}")
             return None
-
+    # --- ADD THIS MISSING METHOD HERE ---
+    async def generate_sql_async(self, question: str, allow_llm_to_see_data=False):
+        """Async wrapper for the blocking generate_sql method."""
+        return await asyncio.to_thread(
+            self.generate_sql, 
+            question=question, 
+            allow_llm_to_see_data=allow_llm_to_see_data
+        )
+    # ------------------------------------
     # Helper for Async Contexts (FastAPI)
     async def run_sql_async(self, sql: str):
         return await asyncio.to_thread(self._custom_run_sql, sql)
