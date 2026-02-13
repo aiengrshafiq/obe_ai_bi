@@ -3,6 +3,7 @@ import numpy as np
 import math
 import re
 import time
+import traceback  # <--- Added for visibility
 from datetime import datetime
 from typing import Dict, Any
 
@@ -76,16 +77,21 @@ class Orchestrator:
             current_prompt = self._build_prompt(user_msg, history_context, intent_result, date_context)
             
             while attempts <= max_retries:
+                # Initialize variables to avoid UnboundLocalError
+                clean_sql = ""
+                
                 try:
                     # A. Generate SQL
                     generated_sql = await SQLAgent.generate(current_prompt)
+                    
+                    # Clean the output
                     clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
                     clean_sql = clean_sql.replace("CLARIFICATION:", "").strip()
 
                     # B. Safety Gate
                     safe_sql = SQLGuard.validate_and_fix(clean_sql)
                     
-                    # LOGGING: Extract Tables (Simple Regex for logging)
+                    # LOGGING: Extract Tables
                     tables = re.findall(r'(?:FROM|JOIN)\s+(?:public\.)?([a-zA-Z0-9_]+)', safe_sql, re.IGNORECASE)
                     log_entry.tables_used = ", ".join(set(tables))
                     
@@ -131,6 +137,7 @@ class Orchestrator:
                     return self._json_safe(result)
 
                 except SQLPolicyException as pe:
+                    # Security violation = No retry
                     return self._finalize_safe(log_entry, "error", message=f"Security Block: {str(pe)}")
                 
                 except Exception as e:
@@ -140,9 +147,12 @@ class Orchestrator:
                     print(f"⚠️ SQL Fail (Attempt {attempts}): {last_error}")
                     
                     if attempts <= max_retries:
+                        # Fallback if clean_sql wasn't generated
+                        sql_context = clean_sql if clean_sql else "NO_SQL_GENERATED"
+                        
                         current_prompt = (
                             f"The previous SQL you generated failed.\n"
-                            f"FAILED SQL: {clean_sql}\n"
+                            f"FAILED SQL: {sql_context}\n"
                             f"ERROR MESSAGE: {last_error}\n"
                             f"TASK: Fix the SQL logic. Return ONLY the valid SQL."
                         )
@@ -155,7 +165,9 @@ class Orchestrator:
             return self._finalize_safe(log_entry, "error", message=f"I tried to run the query, but it kept failing: {last_error}")
 
         except Exception as e:
-            print(f"Orchestrator Error: {e}")
+            # THIS IS WHERE YOUR ERROR WAS HIDDEN
+            print(f"Orchestrator Fatal Error: {e}")
+            traceback.print_exc()  # <--- Now you will see the full error in logs
             return self._finalize_safe(log_entry, "error", message="An internal system error occurred.")
         finally:
             self.db.close()
