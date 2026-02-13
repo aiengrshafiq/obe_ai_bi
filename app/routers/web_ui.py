@@ -35,9 +35,28 @@ def get_db():
         db.close()
 
 # --- Dependency: Get Current User ---
-async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_db)):
+async def get_current_user(
+    request: Request,
+    token: str = Depends(oauth2_scheme), # Tries header first
+    db = Depends(get_db)
+):
+    # 1. Try Header Token (API calls)
     user = verify_token(token, db)
+    
+    # 2. If Header failed, Try Cookie (Browser navigation)
     if not user:
+        cookie_token = request.cookies.get("access_token")
+        if cookie_token:
+            # Clean "Bearer " prefix if present in cookie
+            clean_token = cookie_token.replace("Bearer ", "")
+            user = verify_token(clean_token, db)
+
+    # 3. Final Check
+    if not user:
+        # If it's a browser page request (HTML), redirect to login instead of 401 JSON
+        if "text/html" in request.headers.get("accept", ""):
+            return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+            
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -47,12 +66,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
 
 # 1. Login Endpoint (Public)
 @router.post("/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)):
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)): # Added 'response: Response'
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     
     access_token = create_access_token(data={"sub": user.username})
+    token_str = f"Bearer {access_token}"
+    
+    # SET COOKIE (Critical for Admin Page access)
+    response.set_cookie(
+        key="access_token", 
+        value=token_str, 
+        httponly=True,   # Secure: JS cannot read it
+        max_age=86400,   # 1 day
+        samesite="lax"
+    )
+    
     return {"access_token": access_token, "token_type": "bearer"}
 
 # 2. Register Endpoint (PROTECTED - Only logged in users can create new users)

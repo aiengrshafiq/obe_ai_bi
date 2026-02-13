@@ -5,6 +5,7 @@ import json
 import re
 import numpy as np
 from app.services.vanna_wrapper import vn
+import asyncio
 
 class VisualizationAgent:
     """
@@ -85,7 +86,8 @@ class VisualizationAgent:
 
         try:
             # 1. Get JSON from LLM
-            response = await vn.generate_summary(question=prompt, df=df)
+            
+            response = await asyncio.to_thread(vn.generate_summary, question=prompt, df=df)
             
             # Clean response to ensure valid JSON
             json_str = response.replace("```json", "").replace("```", "").strip()
