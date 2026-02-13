@@ -4,59 +4,71 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OneBullEx Intelligence</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
         .fade-in-up { animation: fadeInUp 0.3s ease-out forwards; opacity: 0; transform: translateY(10px); }
         @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
-        /* Markdown Tables Styling */
-        .prose table { font-size: 0.875rem; width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-        .prose th { background: #f8fafc; padding: 8px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0; }
-        .prose td { border-bottom: 1px solid #f1f5f9; padding: 8px; color: #334155; }
-        .prose tr:last-child td { border-bottom: none; }
+
+        /* Markdown Prose Styling */
+        .prose p { margin-bottom: 0.75em; line-height: 1.6; }
+        .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .prose ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .prose strong { color: #1e293b; font-weight: 600; }
+        .prose code { background-color: #f1f5f9; padding: 2px 4px; rounded: 4px; font-family: monospace; font-size: 0.9em; color: #ef4444; }
+        .prose pre { background-color: #1e293b; color: #e2e8f0; padding: 1rem; rounded-lg; overflow-x: auto; margin-bottom: 1rem; }
+        .prose pre code { background-color: transparent; color: inherit; padding: 0; }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden bg-gray-50">
+<body class="h-screen flex overflow-hidden bg-gray-50 text-slate-800">
 
     <div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
-        <span class="font-bold text-lg text-blue-400">OneBullEx</span>
+        <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
         <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
     </div>
 
-    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-xl h-full pt-14 md:pt-0">
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-2xl h-full pt-14 md:pt-0 border-r border-slate-800">
         <div class="p-6 border-b border-slate-800 hidden md:block">
-            <h1 class="text-xl font-bold tracking-tight text-blue-400">OneBullEx</h1>
-            <p class="text-xs text-slate-400 mt-1">Enterprise Data Copilot</p>
+            <h1 class="text-xl font-bold tracking-tight text-blue-400 flex items-center gap-2">
+                <span class="text-2xl">🐂</span> OneBullEx
+            </h1>
+            <p class="text-[11px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Enterprise BI Copilot</p>
         </div>
         
         <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar">
-            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg transition-all shadow-md group border border-blue-500">
+            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-3 rounded-lg transition-all shadow-lg group border border-blue-500 mb-6">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 <span class="font-medium text-sm">New Analysis</span>
             </button>
 
-            <div class="pt-6 pb-2 text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Quick Queries</div>
+            <div class="pt-2 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Quick Queries</div>
             
-            <button onclick="fillInput('Show top 10 large deposits')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
-                <span class="text-lg">💰</span>
-                <span class="text-sm">Large Deposits</span>
+            <button onclick="fillInput('Show top 10 large deposits')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
+                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">💰</span>
+                <span class="text-sm font-medium">Large Deposits</span>
             </button>
-            <button onclick="fillInput('User registration trend last 7 days')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
-                <span class="text-lg">📈</span>
-                <span class="text-sm">User Growth</span>
+            <button onclick="fillInput('User registration trend last 7 days')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
+                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">📈</span>
+                <span class="text-sm font-medium">User Growth</span>
             </button>
-            <button onclick="fillInput('Show fraud risk summary')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white">
-                <span class="text-lg">🛡️</span>
-                <span class="text-sm">Risk Analysis</span>
+            <button onclick="fillInput('Show fraud risk summary')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
+                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">🛡️</span>
+                <span class="text-sm font-medium">Risk Analysis</span>
             </button>
 
-            <div class="pt-6 pb-2 text-xs font-bold text-slate-500 uppercase tracking-wider px-2">Tools</div>
+            <div class="pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Tools</div>
             <a href="/admin/logs" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
                 <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span class="text-sm">System Logs</span>
@@ -68,11 +80,14 @@
         </nav>
 
         <div class="p-4 border-t border-slate-800 bg-slate-900 mt-auto">
-            <div class="flex items-center gap-3 mb-3">
-                <div class="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shadow-lg" id="user-avatar">U</div>
-                <div class="text-sm font-medium text-white truncate" id="username-display">User</div>
+            <div class="flex items-center gap-3 mb-4 px-2">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-lg ring-2 ring-slate-800" id="user-avatar">U</div>
+                <div class="flex flex-col overflow-hidden">
+                    <div class="text-sm font-semibold text-white truncate" id="username-display">User</div>
+                    <div class="text-[10px] text-slate-400 truncate">Analyst Access</div>
+                </div>
             </div>
-            <button onclick="logout()" class="w-full text-xs text-red-400 hover:text-red-300 hover:bg-slate-800 py-2 rounded flex items-center justify-center gap-2 transition-colors">
+            <button onclick="logout()" class="w-full text-xs font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-slate-700">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 Sign Out
             </button>
@@ -81,29 +96,36 @@
 
     <main class="flex-1 flex flex-col h-full bg-white relative w-full pt-14 md:pt-0">
         
-        <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10">
+        <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
             <div class="flex items-center gap-3">
-                <h2 class="text-lg font-semibold text-slate-800">Intelligence Engine</h2>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 tracking-wide">BETA v2.0</span>
+                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Intelligence Engine</h2>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 tracking-wide uppercase">Production</span>
             </div>
-            <div class="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded border border-slate-100">
-                Connected: Data Warehouse (Live)
+            <div class="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                Data Warehouse Live
             </div>
         </header>
 
-        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scroll-smooth bg-gray-50/30">
+        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth bg-[#f8fafc]">
             
-            <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up">
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-md mt-1">AI</div>
+            <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up pt-4">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
                 <div class="bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
                     <h3 class="font-semibold text-gray-900 mb-2 text-lg">Ready to analyze.</h3>
-                    <p class="text-gray-600 leading-relaxed mb-4">I can query all data cubes including User Profiles, Trading Activity, Financial Audits, and Risk Logs.</p>
+                    <p class="text-gray-600 text-sm leading-relaxed mb-5">
+                        I have secure, read-only access to <strong>User Profiles, Trading Activity, Financial Audits, and Risk Logs</strong>.
+                        <br>How can I help you today?
+                    </p>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <button onclick="fillInput('Show total trading volume by day for last week')" class="text-left text-sm p-3 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors text-gray-600 hover:text-blue-700">
-                            📈 Show daily volume trend
+                        <button onclick="fillInput('Show total trading volume by day for last week')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium group">
+                            <span class="mr-2 group-hover:scale-110 inline-block transition-transform">📈</span> Show daily volume trend
                         </button>
-                        <button onclick="fillInput('List users with high risk score > 0.8')" class="text-left text-sm p-3 bg-gray-50 hover:bg-blue-50 border border-gray-100 hover:border-blue-200 rounded-lg transition-colors text-gray-600 hover:text-blue-700">
-                            🚨 Find high-risk users
+                        <button onclick="fillInput('List users with high risk score > 0.8')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium group">
+                            <span class="mr-2 group-hover:scale-110 inline-block transition-transform">🚨</span> Find high-risk users
                         </button>
                     </div>
                 </div>
@@ -112,27 +134,33 @@
             <div id="scroll-anchor" class="h-1"></div>
         </div>
 
-        <div class="flex-none w-full bg-white border-t border-gray-200 p-4 md:p-6 z-20">
+        <div class="flex-none w-full bg-white border-t border-gray-200 p-4 md:p-6 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
             <div class="max-w-4xl mx-auto relative group">
-                <div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl opacity-0 group-focus-within:opacity-10 transition-opacity duration-300 -m-1"></div>
-                <div class="relative flex items-center bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:shadow-lg focus-within:border-blue-500 transition-all">
-                    <input type="text" id="user-input" 
-                        class="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base rounded-2xl px-5 py-4 focus:outline-none" 
+                <div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl opacity-0 group-focus-within:opacity-20 transition-opacity duration-300 -m-[2px]"></div>
+                <div class="relative flex items-end bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:shadow-md focus-within:border-blue-500 transition-all overflow-hidden">
+                    
+                    <textarea id="user-input" 
+                        class="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base px-5 py-4 focus:outline-none resize-none max-h-48" 
                         placeholder="Ask a question about your data..."
-                        autocomplete="off"
-                        onkeypress="handleKeyPress(event)">
-                    <button onclick="sendMessage()" class="mr-2 p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all hover:scale-105 shadow-md disabled:opacity-50 disabled:hover:scale-100" id="send-btn">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                    </button>
+                        rows="1"
+                        oninput="autoResize(this)"
+                        onkeydown="handleKeyPress(event)"></textarea>
+                    
+                    <div class="pb-2 pr-2">
+                        <button onclick="sendMessage()" class="p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all hover:scale-105 shadow-md disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed" id="send-btn">
+                            <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="text-center mt-2">
-                    <p class="text-[10px] text-gray-400">AI can make mistakes. Verify critical financial data.</p>
+                <div class="text-center mt-2 flex justify-center items-center gap-2">
+                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p class="text-[11px] text-gray-400 font-medium">AI generated content. Verify critical financial data.</p>
                 </div>
             </div>
         </div>
     </main>
 
-    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/50 hidden z-30 md:hidden backdrop-blur-sm"></div>
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
 
     <script>
         const token = localStorage.getItem('access_token');
@@ -153,23 +181,31 @@
             overlay.classList.toggle('hidden');
         }
 
+        // Auto-resize textarea
+        function autoResize(el) {
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        }
+
         let chatHistory = [];
         window.queryResults = {};
 
         function fillInput(text) {
             const input = document.getElementById('user-input');
             input.value = text;
+            autoResize(input);
             input.focus();
         }
 
-        function handleKeyPress(e) { if (e.key === 'Enter') sendMessage(); }
+        function handleKeyPress(e) { 
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
 
-        // Robust Scrolling Function
         function scrollToBottom() {
-            const container = document.getElementById('chat-container');
             const anchor = document.getElementById('scroll-anchor');
-            
-            // Wait for DOM to update
             setTimeout(() => {
                 anchor.scrollIntoView({ behavior: 'smooth', block: 'end' });
             }, 100);
@@ -182,6 +218,7 @@
             if (!text) return;
 
             input.value = '';
+            input.style.height = 'auto'; // Reset height
             input.disabled = true;
             btn.disabled = true;
             
@@ -208,14 +245,12 @@
                 renderResponse(data);
 
             } catch (err) {
-                document.getElementById(loadingId).remove();
+                if(document.getElementById(loadingId)) document.getElementById(loadingId).remove();
                 appendSystemMessage("Network Error: " + err.message, "text-red-500");
             } finally {
                 input.disabled = false;
                 btn.disabled = false;
                 input.focus();
-                // Ensure focus remains for quick typing
-                setTimeout(() => input.focus(), 100);
             }
         }
 
@@ -223,7 +258,9 @@
             const container = document.getElementById('chat-container');
             const div = document.createElement('div');
             div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
-            div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${text}</div>`;
+            // Sanitized user input display (even though it's local)
+            const safeText = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
+            div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${safeText}</div>`;
             container.insertBefore(div, document.getElementById('scroll-anchor'));
             scrollToBottom();
         }
@@ -235,7 +272,7 @@
             div.id = id;
             div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">AI</div>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
                 <div class="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
                     <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
                     <span class="text-xs text-gray-500 font-medium">Analyzing data...</span>
@@ -250,7 +287,7 @@
             const div = document.createElement('div');
             div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-sm">!</div>
+                <div class="w-10 h-10 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md">!</div>
                 <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${text}</div>`;
             container.insertBefore(div, document.getElementById('scroll-anchor'));
             scrollToBottom();
@@ -264,52 +301,73 @@
             let content = '';
             
             if (data.type === 'error') {
-                content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100">⚠️ ${data.message}</div>`;
+                content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    ${data.message}
+                </div>`;
             } else if (data.type === 'text') {
-                content = `<div class="text-slate-700 text-sm leading-7 prose">${data.message}</div>`;
+                // MARKDOWN PARSING + SANITIZATION
+                const rawHtml = marked.parse(data.message);
+                const safeHtml = DOMPurify.sanitize(rawHtml);
+                content = `<div class="text-slate-700 text-sm leading-relaxed prose">${safeHtml}</div>`;
             } else {
                 const resultId = Date.now();
                 if(data.data) window.queryResults[resultId] = data.data;
 
-                content += `<div class="flex items-center gap-2 mb-3 text-xs text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit">
-                    <span>🧠 Logic:</span> <span class="text-slate-600">${data.thought || 'Processed'}</span>
-                </div>`;
+                // Thought / Logic Block
+                if (data.thought) {
+                    content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none">
+                        <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${data.thought}</span>
+                    </div>`;
+                }
 
+                // SQL Block (VS Code Style)
                 content += `
                     <details class="group mb-4">
-                        <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none">
+                        <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none transition-colors">
                             <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
                             View SQL Query
                         </summary>
                         <div class="mt-2 relative">
-                            <textarea class="w-full bg-slate-900 text-emerald-400 font-mono text-xs p-3 rounded-lg h-24 focus:ring-1 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700" spellcheck="false" id="sql-${resultId}">${data.sql}</textarea>
+                            <div class="absolute top-0 left-0 w-full h-8 bg-slate-800 rounded-t-lg flex items-center px-3 gap-1.5">
+                                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                            </div>
+                            <textarea class="w-full bg-slate-900 text-blue-300 font-mono text-xs p-4 pt-10 rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700 leading-relaxed" spellcheck="false" id="sql-${resultId}">${data.sql}</textarea>
                             <div class="absolute top-2 right-2 flex gap-2">
-                                <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1 rounded shadow transition-colors">Run Edit</button>
+                                <button onclick="copyToClipboard('sql-${resultId}')" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 transition-colors" title="Copy SQL">📋</button>
+                                <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-3 py-1 rounded shadow transition-colors font-medium">Run Edit</button>
                             </div>
                         </div>
                     </details>`;
 
+                // Visualization
                 if (data.visual_type === 'plotly' && data.plotly_code) {
                     const chartId = 'viz-' + resultId;
                     content += `
-                        <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+                        <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm mb-4">
                             <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
                         </div>`;
                     setTimeout(() => {
                         Plotly.purge(chartId);
                         Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
                     }, 50);
-                } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
+                } 
+                
+                // Table
+                if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
                     content += generateTable(data.data);
-                } else {
-                    content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center">No data found.</div>`;
+                } else if (data.visual_type !== 'plotly') {
+                    content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
                 }
 
+                // CSV Download
                 if (data.data && data.data.length > 0) {
                     content += `
-                        <div class="mt-4 flex gap-2 justify-end">
-                            <button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1 text-slate-500 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-md hover:shadow-sm transition-all">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <div class="mt-3 flex gap-2 justify-end">
+                            <button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                                 Download CSV
                             </button>
                         </div>`;
@@ -317,31 +375,43 @@
             }
 
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex-shrink-0 flex items-center justify-center text-white text-xs shadow-md mt-1">AI</div>
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white mt-1">AI</div>
                 <div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content}</div>`;
             
             container.insertBefore(div, document.getElementById('scroll-anchor'));
             scrollToBottom();
         }
 
+        // Helper: Format Numbers with Commas
+        function formatNumber(num) {
+            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
+        }
+
         function generateTable(data) {
             if (!data || data.length === 0) return '';
             const headers = Object.keys(data[0]);
             let rows = '';
-            data.slice(0, 10).forEach(row => {
-                rows += `<tr class="hover:bg-blue-50/30 transition-colors">` + 
-                        Object.values(row).map(v => `<td class="px-4 py-3 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${(typeof v==='number' && !Number.isInteger(v)) ? v.toFixed(2) : v}</td>`).join('') + 
+            
+            data.slice(0, 10).forEach((row, idx) => {
+                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+                rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">` + 
+                        Object.values(row).map(v => {
+                            let displayVal = v;
+                            if (typeof v === 'number') displayVal = formatNumber(v);
+                            return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal}</td>`;
+                        }).join('') + 
                         `</tr>`;
             });
+            
             return `
-                <div class="overflow-x-auto rounded-lg border border-slate-200 shadow-sm mt-2">
-                    <table class="min-w-full text-sm text-left">
-                        <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
-                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200">${h}</th>`).join('')}</tr>
+                <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm mt-2 max-h-[400px] overflow-y-auto">
+                    <table class="min-w-full text-sm text-left relative border-collapse">
+                        <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm">
+                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${h}</th>`).join('')}</tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-slate-100">${rows}</tbody>
+                        <tbody class="divide-y divide-slate-100">${rows}</tbody>
                     </table>
-                    ${data.length > 10 ? `<div class="p-2 text-center text-xs text-slate-400 bg-slate-50 border-t border-slate-100">Showing first 10 of ${data.length} rows</div>` : ''}
+                    ${data.length > 10 ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">Showing first 10 of ${data.length} rows. Download CSV for full data.</div>` : ''}
                 </div>`;
         }
 
@@ -360,20 +430,23 @@
             link.click();
         }
 
+        function copyToClipboard(elementId) {
+            const copyText = document.getElementById(elementId);
+            copyText.select();
+            navigator.clipboard.writeText(copyText.value);
+        }
+
         async function runCustomSQL(id) {
             const textarea = document.getElementById(`sql-${id}`);
             const sql = textarea.value.trim();
             if (!sql) return;
             
-            // Find the button relative to the textarea
-            // Structure: details > div > div(absolute) > button
-            const btn = textarea.nextElementSibling.querySelector('button');
+            const btn = textarea.nextElementSibling.querySelector('button:last-child');
             const originalText = btn.innerText;
             
-            // UI Feedback (On the button, not the chat input)
             btn.innerText = "Running...";
             btn.disabled = true;
-            btn.classList.add("opacity-50", "cursor-not-allowed");
+            btn.classList.add("opacity-75", "cursor-not-allowed");
             
             try {
                 const res = await fetch('/api/run_custom_sql', {
@@ -385,19 +458,16 @@
                 const data = await res.json();
                 
                 if (data.type === 'error') {
-                    // Show error in a small alert or append system message
-                    appendSystemMessage("SQL Error: " + data.message, "text-red-600");
+                    appendSystemMessage("SQL Execution Failed: " + data.message, "text-red-600");
                 } else {
-                    // Render the new result at the bottom
                     renderResponse(data);
                 }
             } catch(e) {
                 alert("Execution Error: " + e);
             } finally {
-                // Reset Button
                 btn.innerText = originalText;
                 btn.disabled = false;
-                btn.classList.remove("opacity-50", "cursor-not-allowed");
+                btn.classList.remove("opacity-75", "cursor-not-allowed");
             }
         }
     </script>

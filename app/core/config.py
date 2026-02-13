@@ -23,7 +23,7 @@ class Settings:
     DATABASE_URL: str = f"postgresql+asyncpg://{DB_USER_ENC}:{DB_PASS_ENC}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
     # 4. Security & AI
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecretkey")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "SOMESECRETKEY")
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY") # Qwen Key
     # print(f"DEBUG: Loaded Key: '{DASHSCOPE_API_KEY}'")

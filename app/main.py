@@ -10,42 +10,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import web_ui
 from app.db.vanna_db import setup_vanna_db_connection
-from app.services.vanna_training import train_vanna_on_startup
+# REMOVED: from app.services.vanna_training import train_vanna_on_startup
 
-# --- 1. LIFESPAN MANAGER (The Modern Way) ---
+# --- 1. LIFESPAN MANAGER ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Manages the application lifecycle.
-    Code before 'yield' runs on startup.
-    Code after 'yield' runs on shutdown.
-    """
     print("🟢 System Starting Up...")
     
-    # A. Setup Vanna Connection
+    # A. Connectivity Check
     try:
         setup_vanna_db_connection()
-        print("✅ Vanna DB Connected")
+        print("✅ Vanna DB Connectivity: OK")
     except Exception as e:
-        print(f"❌ Critical Error: Could not connect to Vanna DB. {e}")
-        # In strict product mode, you might want to raise e here to stop deployment
-    
-    # B. Auto-Train Knowledge Base (Smart Training)
-    try:
-        await train_vanna_on_startup(force_retrain=False)
-    except Exception as e:
-        print(f"⚠️ Warning: Knowledge Base training failed. System will run with existing data. {e}")
+        print(f"❌ Critical Error: Vanna DB Connection Failed. {e}")
+        # In strict mode, raise e here.
+
+    # B. Knowledge Base
+    # We now trust the 'vanna_storage' baked into the Docker image.
+    print("🧠 Knowledge Base: Loaded from Build Image (vanna_storage).")
 
     yield
     
     print("🔴 System Shutting Down...")
-    # Clean up resources (e.g., close DB pools) here if needed later
 
 # --- 2. INITIALIZE APP ---
 app = FastAPI(
     title=settings.PROJECT_NAME, 
     version=settings.VERSION,
-    lifespan=lifespan # Inject the lifecycle manager
+    lifespan=lifespan
 )
 
 # --- 3. MOUNT STATIC & TEMPLATES ---
@@ -59,7 +51,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # --- 4. MIDDLEWARE (CORS) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In strict production, replace "*" with specific domains
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

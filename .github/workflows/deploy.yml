@@ -24,12 +24,18 @@ jobs:
         region-id: ${{ secrets.ALIYUN_REGION_ID }}
         access-key-id: ${{ secrets.ALIYUN_ACCESS_KEY }}
         access-key-secret: ${{ secrets.ALIYUN_ACCESS_SECRET }}
-        instance-id: "cri-7lw9a26kgowh6dao" # Keeping your existing Instance ID
+        instance-id: "cri-7lw9a26kgowh6dao" 
 
-    # 2. Build and Push Docker Image
+    # 2. Build and Push Docker Image (UPDATED)
+    # We pass build-args so the 'build_vanna.py' script can use the API Key 
+    # to generate embeddings inside the image.
     - name: Build and Push Image
       run: |
-        docker build -t ${{ env.IMAGE_URL }} .
+        docker build \
+          --build-arg DASHSCOPE_API_KEY="${{ secrets.DASHSCOPE_API_KEY }}" \
+          --build-arg AI_MODEL_NAME="qwen3-coder-plus" \
+          --build-arg AI_BASE_URL="https://dashscope-intl.aliyuncs.com/compatible-mode/v1" \
+          -t ${{ env.IMAGE_URL }} .
         docker push ${{ env.IMAGE_URL }}
 
     # 3. Install Alibaba Cloud CLI
@@ -50,7 +56,6 @@ jobs:
           --access-key-secret ${{ secrets.ALIYUN_ACCESS_SECRET }}
 
     # 5. GENERATE VPC URL
-    # Using your existing logic to inject '-vpc' into the registry domain
     - name: Generate SAE VPC URL
       id: vpc_config
       run: |

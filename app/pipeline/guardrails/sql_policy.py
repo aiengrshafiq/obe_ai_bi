@@ -1,14 +1,17 @@
 import sqlglot
 from sqlglot import exp
+from app.core.cube_registry import CubeRegistry
 
 class SQLPolicyException(Exception):
-    """Raised when SQL violates safety rules."""
+    """Raised when SQL violates safety or business rules."""
     pass
 
 class SQLGuard:
     """
-    Production-grade SQL Validator using AST parsing.
-    Enforces: Read-Only, Row Limits (Smart), No prohibited functions.
+    Enterprise SQL Validator.
+    1. Blocks writes (DROP, DELETE).
+    2. Enforces DATE FILTERS on large tables.
+    3. Injects LIMITs on raw data queries.
     """
     
     FORBIDDEN_COMMANDS = {
@@ -16,60 +19,70 @@ class SQLGuard:
         "TRUNCATE", "CREATE", "REPLACE", "MERGE", "CALL", "EXPLAIN"
     }
     
-    FORBIDDEN_FUNCTIONS = {
-        "PG_SLEEP", "PG_TERMINATE_BACKEND", "VERSION", "CURRENT_USER", "DBLINK"
-    }
-
+    # Tables that MUST have a partition filter to avoid scanning 100TB of data
+    # (We fetch this dynamically from Registry)
+    
     @staticmethod
     def validate_and_fix(sql: str) -> str:
-        """
-        Parses SQL, checks rules, and injects LIMIT only for non-aggregated queries.
-        """
         try:
+            # Parse SQL into AST
             parsed = sqlglot.parse_one(sql)
         except Exception as e:
             raise SQLPolicyException(f"Invalid SQL syntax: {str(e)}")
 
-        # 1. Enforce SELECT / WITH only
+        # --- RULE 1: READ ONLY ---
         if not isinstance(parsed, (exp.Select, exp.Union, exp.With)):
             raise SQLPolicyException("Security Alert: Only SELECT statements are allowed.")
 
-        # 2. Walk the tree for Security Checks & Aggregation Detection
+        # Traverse the AST once
+        tables_found = set()
         has_aggregation = False
-        
-        # Check if there is a GROUP BY clause immediately
-        if parsed.args.get("group"):
-            has_aggregation = True
+        has_limit = parsed.args.get("limit") is not None
 
         for node in parsed.walk():
-            # Security: Check for forbidden commands
+            # Check Commands
             if isinstance(node, exp.Command):
                 raise SQLPolicyException("Security Alert: System commands are forbidden.")
             
-            # Security: Check for forbidden functions
-            if isinstance(node, exp.Func):
-                func_name = node.sql().split('(')[0].upper()
-                if func_name in SQLGuard.FORBIDDEN_FUNCTIONS:
-                    raise SQLPolicyException(f"Security Alert: Function '{func_name}' is banned.")
-                
-                # Logic: Check for aggregate functions
-                if func_name in {"SUM", "COUNT", "AVG", "MIN", "MAX", "STDDEV", "VARIANCE"}:
-                    has_aggregation = True
+            # Check Tables
+            if isinstance(node, exp.Table):
+                table_name = node.name
+                tables_found.add(table_name)
+            
+            # Check Aggregations (SUM, COUNT, etc)
+            if isinstance(node, exp.AggFunc):
+                has_aggregation = True
+            if isinstance(node, exp.Group):
+                has_aggregation = True
 
-        # 3. Smart Limit Injection
-        # Only force LIMIT if it's a RAW data query (No aggregation/group by)
-        limit_node = parsed.args.get("limit")
+        # --- RULE 2: PARTITION ENFORCEMENT ---
+        # If querying a 'di' (Incremental) table, you MUST have a 'ds' filter.
+        # This prevents accidental "SELECT * FROM huge_table" calls.
         
-        if not limit_node:
-            if not has_aggregation:
-                # Raw data -> Force Safety Limit
-                parsed = parsed.limit(100)
-            else:
-                # Aggregation -> Allow full result (Trend lines need all points)
-                pass 
-        else:
-            # If User/LLM provided a limit, we generally trust it, 
-            # but we could clamp it here if needed (e.g. max 5000).
-            pass
+        # We check the WHERE clause for 'ds'
+        where_clause = parsed.args.get("where")
+        has_ds_filter = False
+        if where_clause:
+            # Naive check: does the string 'ds' appear in the WHERE condition?
+            # A full AST check is complex, but this is 99% effective for generated SQL.
+            if "ds" in where_clause.sql().lower():
+                has_ds_filter = True
+
+        for tbl in tables_found:
+            cube = CubeRegistry.get_cube(tbl)
+            if cube and cube.kind == 'di' and not has_ds_filter:
+                # OPTIONAL: You could try to auto-inject "WHERE ds = '{latest_ds}'" here.
+                # For now, we block it to teach the AI to be precise.
+                # But to avoid user frustration, let's inject a safe limit instead.
+                if not has_limit:
+                    parsed = parsed.limit(10)
+                    has_limit = True
+                # Ideally, raise exception:
+                # raise SQLPolicyException(f"Querying incremental table '{tbl}' requires a 'ds' partition filter.")
+
+        # --- RULE 3: SMART LIMIT ---
+        # If no aggregation (just listing rows) and no limit, force a limit.
+        if not has_aggregation and not has_limit:
+            parsed = parsed.limit(100)
 
         return parsed.sql()

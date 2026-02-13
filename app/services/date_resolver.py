@@ -1,0 +1,77 @@
+# app/services/date_resolver.py
+import time
+from datetime import datetime, timedelta
+from sqlalchemy import text
+from app.db.session import SessionLocal
+from app.services.cache import cache
+
+class DateResolver:
+    """
+    The Timekeeper.
+    Ensures all SQL queries use the correct, deterministic 'latest_ds' partition.
+    """
+
+    @staticmethod
+    async def get_latest_ds() -> str:
+        """
+        Returns the latest available partition 'YYYYMMDD'.
+        Strategies:
+        1. Memory Cache (Fastest)
+        2. DB Query (Source of Truth)
+        3. Fallback (Yesterday)
+        """
+        # 1. Check Cache
+        cached_ds = cache.get("latest_ds")
+        if cached_ds:
+            return str(cached_ds)
+
+        # 2. Check DB
+        try:
+            async with SessionLocal() as session:
+                # We query user_profile_360 as the "Anchor Table"
+                # If this table has data, the warehouse load is likely done.
+                result = await session.execute(text("SELECT MAX(ds) FROM public.user_profile_360"))
+                row = result.fetchone()
+                
+                if row and row[0]:
+                    new_ds = str(row[0])
+                    # Cache for 1 hour
+                    cache.set("latest_ds", new_ds, ttl_seconds=3600)
+                    print(f"🔄 DateResolver: Refreshed latest_ds = {new_ds}")
+                    return new_ds
+        except Exception as e:
+            print(f"⚠️ DateResolver Error: {e}")
+
+        # 3. Fallback: Yesterday
+        fallback = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")
+        print(f"⚠️ DateResolver: Using Fallback {fallback}")
+        return fallback
+
+    @staticmethod
+    async def get_date_context() -> dict:
+        """
+        Returns a dictionary of date variables to inject into the LLM Prompt.
+        """
+        latest_ds = await DateResolver.get_latest_ds()
+        
+        # Parse logic
+        dt_current = datetime.strptime(latest_ds, "%Y%m%d")
+        
+        # Formats
+        latest_ds_dash = dt_current.strftime("%Y-%m-%d")
+        
+        # Ranges
+        start_7d = (dt_current - timedelta(days=6)).strftime("%Y%m%d")
+        start_30d = (dt_current - timedelta(days=29)).strftime("%Y%m%d")
+        
+        # First day of current month
+        start_month = dt_current.replace(day=1).strftime("%Y%m%d")
+
+        return {
+            "latest_ds": latest_ds,             # '20260212'
+            "latest_ds_dash": latest_ds_dash,   # '2026-02-12'
+            "today_iso": datetime.now().strftime("%Y-%m-%d"), # Real world today
+            "start_7d": start_7d,
+            "start_30d": start_30d,
+            "start_month": start_month
+        }

@@ -1,125 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Admin Logs</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Logs | OneBullEx</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        [x-cloak] { display: none !important; }
+    </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans" x-data="{ showModal: false, activeLog: {} }">
+<body class="bg-gray-50 text-slate-800" x-data="{ showModal: false, activeLog: {} }">
 
-    <div class="bg-white shadow p-4 flex justify-between items-center mb-6">
-        <div class="flex items-center gap-4">
-            <a href="/" class="text-gray-500 hover:text-blue-600 flex items-center gap-1 transition">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                Back to App
-            </a>
-            <h1 class="text-xl font-bold text-gray-800">System Logs</h1>
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-20">
+        <div class="max-w-[98%] mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🐂</span>
+                    <h1 class="text-lg font-bold text-slate-900 tracking-tight">System Intelligence Logs</h1>
+                </div>
+                <nav class="hidden md:flex items-center gap-1">
+                    <a href="/" class="px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors">
+                        ← Back to Chat
+                    </a>
+                </nav>
+            </div>
+
+            <form method="get" class="flex items-center gap-3">
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-4 w-4 text-gray-400 group-focus-within:text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input type="text" name="username" value="{{ username }}" placeholder="Filter by User..." 
+                           class="pl-9 pr-4 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-64 shadow-sm transition-all">
+                </div>
+                <button type="submit" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-colors">
+                    Filter
+                </button>
+                {% if username %}
+                <a href="/admin/logs" class="px-3 py-1.5 bg-white border border-gray-300 text-slate-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                    Clear
+                </a>
+                {% endif %}
+            </form>
         </div>
+    </header>
+
+    <main class="max-w-[98%] mx-auto px-4 py-6">
         
-        <form method="get" class="flex gap-2">
-            <input type="text" name="username" placeholder="Filter by User..." value="{{ username }}" 
-                   class="px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Search</button>
-            {% if username %}
-                <a href="/admin/logs" class="bg-gray-200 text-gray-600 px-3 py-2 rounded-lg text-sm hover:bg-gray-300">Clear</a>
-            {% endif %}
-        </form>
-    </div>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50/80 border-b border-gray-200 text-xs uppercase text-gray-500 font-semibold tracking-wider">
+                            <th class="px-6 py-4 w-32">Time (UTC)</th>
+                            <th class="px-6 py-4 w-32">User</th>
+                            <th class="px-6 py-4">Question & Logic</th>
+                            <th class="px-6 py-4 text-center w-24">Status</th>
+                            <th class="px-6 py-4 text-center w-24">Rows</th>
+                            <th class="px-6 py-4 text-center w-24">Latency</th>
+                            <th class="px-6 py-4 text-center w-24">DS</th>
+                            <th class="px-6 py-4 w-20">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm">
+                        {% for log in logs %}
+                        <tr class="hover:bg-blue-50/40 transition-colors group">
+                            <td class="px-6 py-4 whitespace-nowrap text-gray-500 text-xs font-mono">
+                                {{ log.timestamp.strftime('%m-%d %H:%M') }}
+                            </td>
+                            
+                            <td class="px-6 py-4">
+                                <div class="font-medium text-gray-900">{{ log.username }}</div>
+                            </td>
 
-    <div class="max-w-7xl mx-auto px-4">
-        <div class="bg-white shadow rounded-lg overflow-hidden">
-            <table class="min-w-full leading-normal">
-                <thead>
-                    <tr>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">Time</th>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">User</th>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">Question</th>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">SQL Preview</th>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                        <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in logs %}
-                    <tr class="hover:bg-gray-50 transition">
-                        <td class="px-5 py-4 border-b border-gray-200 text-sm text-gray-500 whitespace-nowrap">{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
-                        <td class="px-5 py-4 border-b border-gray-200 text-sm font-medium text-gray-900">{{ log.username }}</td>
-                        <td class="px-5 py-4 border-b border-gray-200 text-sm text-gray-700 max-w-xs truncate" title="{{ log.user_question }}">
-                            {{ log.user_question }}
-                        </td>
-                        <td class="px-5 py-4 border-b border-gray-200 text-xs font-mono text-blue-600 max-w-xs truncate">
-                            {{ log.generated_sql if log.generated_sql else '-' }}
-                        </td>
-                        <td class="px-5 py-4 border-b border-gray-200 text-sm">
-                            {% if log.execution_success %}
-                                <span class="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 rounded-full">Success</span>
-                            {% else %}
-                                <span class="px-2 py-1 text-xs font-semibold text-red-700 bg-red-100 rounded-full">Error</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-5 py-4 border-b border-gray-200 text-sm">
-                            <button 
-                                @click="showModal = true; activeLog = {
-                                    time: '{{ log.timestamp }}',
-                                    user: '{{ log.username }}',
-                                    question: `{{ log.user_question | replace('`', '') }}`,
-                                    sql: `{{ log.generated_sql | replace('`', '') if log.generated_sql else '' }}`,
-                                    error: `{{ log.error_message | replace('`', '') if log.error_message else '' }}`
-                                }"
-                                class="text-blue-600 hover:text-blue-800 text-xs font-medium border border-blue-200 px-3 py-1 rounded hover:bg-blue-50">
-                                View
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                            <td class="px-6 py-4">
+                                <div class="flex flex-col gap-1">
+                                    <div class="text-gray-800 font-medium truncate max-w-xl" title="{{ log.user_question }}">
+                                        {{ log.user_question }}
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        {% if log.correction_attempts > 0 %}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800">
+                                                Self-Healed ({{ log.correction_attempts }})
+                                            </span>
+                                        {% endif %}
+                                        {% if log.tables_used %}
+                                            <span class="text-xs text-gray-400 truncate max-w-xs" title="{{ log.tables_used }}">
+                                                🔗 {{ log.tables_used }}
+                                            </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </td>
 
-        <div class="mt-4 flex justify-between items-center">
-            <div class="text-sm text-gray-500">Page {{ page }} of {{ total_pages }}</div>
-            <div class="flex gap-2">
-                {% if page > 1 %}
-                    <a href="?page={{ page-1 }}&username={{ username }}" class="bg-white border px-4 py-2 rounded shadow-sm hover:bg-gray-50 text-sm">Previous</a>
-                {% endif %}
-                {% if page < total_pages %}
-                    <a href="?page={{ page+1 }}&username={{ username }}" class="bg-white border px-4 py-2 rounded shadow-sm hover:bg-gray-50 text-sm">Next</a>
-                {% endif %}
+                            <td class="px-6 py-4 text-center">
+                                {% if log.execution_success %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        Success
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                        Failed
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <td class="px-6 py-4 text-center font-mono text-xs text-gray-600">
+                                {{ log.row_count if log.row_count is not none else '-' }}
+                            </td>
+
+                            <td class="px-6 py-4 text-center font-mono text-xs text-gray-600">
+                                {% if log.execution_ms %}
+                                    <span class="{{ 'text-red-600 font-bold' if log.execution_ms > 5000 else '' }}">
+                                        {{ log.execution_ms }}ms
+                                    </span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+
+                            <td class="px-6 py-4 text-center">
+                                <span class="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                                    {{ log.resolved_latest_ds or 'N/A' }}
+                                </span>
+                            </td>
+
+                            <td class="px-6 py-4 text-right">
+                                <button 
+                                    @click="showModal = true; activeLog = {
+                                        time: '{{ log.timestamp }}',
+                                        user: '{{ log.username }}',
+                                        question: `{{ log.user_question | replace('`', '') }}`,
+                                        sql: `{{ log.generated_sql | replace('`', '') if log.generated_sql else '' }}`,
+                                        error: `{{ log.error_message | replace('`', '') if log.error_message else '' }}`
+                                    }"
+                                    class="text-gray-400 hover:text-blue-600 transition-colors p-1 rounded-md hover:bg-gray-100">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+                <span class="text-xs text-gray-500">Page {{ page }} of {{ total_pages }}</span>
+                <div class="flex gap-2">
+                    {% if page > 1 %}
+                    <a href="?page={{ page - 1 }}&username={{ username }}" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm">Previous</a>
+                    {% endif %}
+                    {% if page < total_pages %}
+                    <a href="?page={{ page + 1 }}&username={{ username }}" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50 transition shadow-sm">Next</a>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    </div>
+    </main>
 
-    <div x-show="showModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
-        <div class="flex items-center justify-center min-h-screen px-4">
-            <div class="fixed inset-0 bg-black opacity-30" @click="showModal = false"></div>
-            
-            <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full relative z-10 p-6 transform transition-all">
-                <div class="flex justify-between items-start mb-4">
-                    <h3 class="text-lg font-bold text-gray-900">Log Details</h3>
-                    <button @click="showModal = false" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
+    <div x-show="showModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showModal = false" aria-hidden="true"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full"
+                 x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95">
                 
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase">Question</label>
-                        <div class="mt-1 p-3 bg-gray-50 rounded text-gray-800 text-sm" x-text="activeLog.question"></div>
-                    </div>
-                    
-                    <div x-show="activeLog.sql">
-                        <label class="block text-xs font-bold text-gray-500 uppercase">Generated SQL</label>
-                        <div class="mt-1 p-3 bg-slate-900 rounded text-green-400 text-xs font-mono overflow-x-auto" x-text="activeLog.sql"></div>
-                    </div>
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-0 sm:text-left w-full">
+                            <h3 class="text-lg leading-6 font-bold text-gray-900 mb-4" id="modal-title">Log Details</h3>
+                            
+                            <div class="space-y-5">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Question</label>
+                                    <div class="mt-1 p-3 bg-gray-50 rounded-lg text-gray-900 text-sm border border-gray-200" x-text="activeLog.question"></div>
+                                </div>
+                                
+                                <div x-show="activeLog.sql">
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Generated SQL</label>
+                                    <div class="mt-1 p-4 bg-[#1e1e1e] rounded-lg border border-gray-700 overflow-x-auto shadow-inner">
+                                        <pre class="text-blue-300 text-xs font-mono leading-relaxed" x-text="activeLog.sql"></pre>
+                                    </div>
+                                </div>
 
-                    <div x-show="activeLog.error">
-                        <label class="block text-xs font-bold text-red-500 uppercase">Error Message</label>
-                        <div class="mt-1 p-3 bg-red-50 border border-red-100 rounded text-red-700 text-sm font-mono" x-text="activeLog.error"></div>
+                                <div x-show="activeLog.error">
+                                    <label class="block text-xs font-semibold text-red-600 uppercase tracking-wide">Error Log</label>
+                                    <div class="mt-1 p-3 bg-red-50 border border-red-100 rounded-lg text-red-700 text-xs font-mono break-all" x-text="activeLog.error"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <div class="mt-6 flex justify-end">
-                    <button @click="showModal = false" class="bg-gray-800 text-white px-4 py-2 rounded text-sm hover:bg-gray-900">Close</button>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button type="button" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm" @click="showModal = false">
+                        Close
+                    </button>
                 </div>
             </div>
         </div>

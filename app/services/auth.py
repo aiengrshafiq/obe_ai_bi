@@ -1,13 +1,19 @@
+# app/services/auth.py
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from app.db.app_models import SessionLocal, User, engine # Ensure engine is imported to force table creation
+from app.db.app_models import SessionLocal, User, engine 
+from app.core.config import settings # Use settings for ENV variables
 
-# CONFIG
-SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_STRING"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 
+# --- SECURITY CONFIG ---
+# Fallback is only for local dev. In Prod, this MUST be loaded from env.
+SECRET_KEY = settings.SECRET_KEY 
+if not SECRET_KEY or "CHANGE_THIS" in SECRET_KEY:
+    print("⚠️ WARNING: USING INSECURE DEFAULT SECRET KEY!")
+
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
 # --- FIX: USE ARGON2 INSTEAD OF BCRYPT ---
 # 'argon2' is modern, secure, and doesn't conflict with ChromaDB's bcrypt version.
