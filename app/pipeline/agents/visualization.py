@@ -27,6 +27,33 @@ class VisualizationAgent:
             return obj.tolist()
         return obj
 
+
+    @staticmethod
+    def _decode_plotly_typed_array(obj):
+        """Recursively finds and converts {'dtype': '...', 'bdata': '...'} to lists."""
+        import base64
+        
+        if isinstance(obj, dict) and "dtype" in obj and "bdata" in obj:
+            try:
+                # Decode binary data
+                raw = base64.b64decode(obj["bdata"])
+                dtype = np.dtype(obj["dtype"])
+                arr = np.frombuffer(raw, dtype=dtype)
+                
+                # Reshape if shape is provided
+                if "shape" in obj and obj["shape"]:
+                    arr = arr.reshape(obj["shape"])
+                return arr.tolist()
+            except Exception:
+                return [] 
+
+        if isinstance(obj, dict):
+            return {k: VisualizationAgent._decode_plotly_typed_array(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [VisualizationAgent._decode_plotly_typed_array(v) for v in obj]
+        return obj
+
+
     @staticmethod
     async def determine_format(df: pd.DataFrame, sql: str, user_question: str, intent_result: dict = None) -> dict:
         """
@@ -103,9 +130,15 @@ class VisualizationAgent:
             fig = VisualizationAgent._build_plotly_figure(df, spec)
             
             if fig:
-                # Convert to JSON for Frontend
-                fig_json = json.loads(fig.to_json())
-                return {"visual_type": "plotly", "plotly_code": fig_json, "thought": f"Generated {spec.get('chart_type')} chart."}
+                # FIX: Decode the binary data manually before returning
+                raw_json = json.loads(fig.to_json())
+                clean_json = VisualizationAgent._decode_plotly_typed_array(raw_json)
+                
+                return {
+                    "visual_type": "plotly", 
+                    "plotly_code": clean_json, 
+                    "thought": f"Generated {spec.get('chart_type')} chart."
+                }
 
         except Exception as e:
             print(f"⚠️ Visualization Fallback: {e}")
