@@ -41,8 +41,8 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
     
     CRITICAL TREND/HISTORY RULES:
     1. **The "Recent History" Rule:** If the user asks for a "Trend" or "History" **without a specific date range**, **apply a default filter**:
-      - **Default:** `ds >= '{latest_ds}'::DATE - INTERVAL '90 days'`
-      - **Reason:** Prevent pulling very old data unless explicitly requested.
+      - **Default:** `ds >= TO_CHAR(TO_DATE('{latest_ds}', 'YYYYMMDD') - INTERVAL '90 days', 'YYYYMMDD')`
+      - **Reason:** Robust date math for text-based partition keys. Prevent pulling very old data unless explicitly requested.
 
     2. **Sort Order:**
       - ALWAYS `ORDER BY [time_column] ASC`.
