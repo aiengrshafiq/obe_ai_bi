@@ -62,5 +62,13 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
     5. **LIMITS:** - **Do NOT** use `LIMIT` for Trend/Aggregation queries (Group By). The system handles large datasets automatically.
        - **Only** use `LIMIT` if listing raw user IDs or transactions (e.g. `LIMIT 100`).
 
+
+    CRITICAL OUTPUT RULES (MUST FOLLOW):
+    1. **NO DATA INSPECTION:** Do NOT generate `intermediate_sql` to check for distinct values. You do NOT have read access to browse data.
+    2. Output ONLY final executable SQL (SELECT/WITH). No markdown.
+    3. NEVER output intermediate_sql or attempt to inspect data with "SELECT DISTINCT ..." first.
+    4. If the question is ambiguous, ASK ONE CLARIFYING QUESTION instead of guessing.
+
+
     NEW QUESTION: {user_msg}
     """

@@ -84,6 +84,11 @@ class Orchestrator:
                     # A. Generate SQL
                     generated_sql = await SQLAgent.generate(current_prompt)
                     
+                    # --- NEW FIX: Detect and Reject Intermediate SQL ---
+                    if "intermediate_sql" in generated_sql.lower():
+                        raise ValueError("LLM tried to inspect data (intermediate_sql detected). Retrying with stricter instruction.")
+                    # ---------------------------------------------------
+                    
                     # Clean the output
                     clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
                     clean_sql = clean_sql.replace("CLARIFICATION:", "").strip()
