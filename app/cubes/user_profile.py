@@ -51,6 +51,11 @@ DOCS = """
 **Table Purpose:**
 This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific day (`ds`).
 
+** ⛔ SCOPE & LIMITATIONS (CRITICAL):**
+1. **NO BLACKLIST DATA:** This table does NOT contain banned/blocked/blacklisted users. 
+   - For "Blacklist", "Banned", or "Risk" queries, you **MUST** use the `risk_campaign_blacklist` table.
+2. **NO TRANSACTIONS:** This table only has *aggregate totals*. For raw deposit/trade lists, use the `dws_` transaction tables.
+
 **Critical SQL Rules:**
 1. **The 'Yesterday' Rule (Partitioning):** - You MUST filter by `ds = '{latest_ds}'` for ANY question about "current" status (e.g., "total users", "current balance").
    - Do NOT scan all partitions unless the user explicitly asks for "History" or "Trend".

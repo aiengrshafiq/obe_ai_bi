@@ -21,13 +21,17 @@ CREATE TABLE public.risk_campaign_blacklist (
 # 2. Documentation
 DOCS = """
 **Table Purpose:**
-A security blacklist. If a user exists in this table, they are BLOCKED/BANNED.
+The **Single Source of Truth** for Blacklisted, Banned, and Blocked users.
+If a user is in this table, they are risky/banned.
 
 **Critical Rules:**
 1. **Time Analysis:** NEVER use 'create_at'. You MUST use `start_date` to find when a user was blacklisted.
 2. **Lookup Pattern:** - Users usually provide a list of IDs. Use `WHERE user_code IN (...)`.
    - **User Code is STRING:** Always wrap IDs in quotes: `user_code IN ('1001', '1002')`.
 3. **Status:** If a row exists, the user is blacklisted.
+4. **Trend Analysis:** This table is NOT partitioned by 'ds'. 
+   - To show a daily trend, you MUST group by `DATE(start_date)`.
+   - Example: `GROUP BY DATE(start_date)`.
 """
 
 # 3. Training Examples (Single & Bulk)
@@ -52,5 +56,9 @@ EXAMPLES = [
         # NEW EXAMPLE: Teaches the model how to handle 'trend' for this specific table
         "question": "Show me the daily trend of blacklisted users.",
         "sql": "SELECT DATE(start_date) as ban_date, COUNT(user_code) as banned_users FROM public.risk_campaign_blacklist GROUP BY 1 ORDER BY 1;"
+    },
+    {
+        "question": "Blacklist user trend daily.",
+        "sql": "SELECT DATE(start_date) as report_date, COUNT(user_code) FROM public.risk_campaign_blacklist GROUP BY 1 ORDER BY 1;"
     }
 ]
