@@ -93,6 +93,14 @@ class Orchestrator:
                     clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
                     clean_sql = clean_sql.replace("CLARIFICATION:", "").strip()
 
+                    # --- NEW FIX: Handle "I don't know" text responses ---
+                    # If it doesn't start with SELECT/WITH, it's not SQL. Don't parse it.
+                    if not re.match(r'^\s*(SELECT|WITH)\b', clean_sql, re.IGNORECASE):
+                        # Treat this as a clarification or error message from the AI
+                        # This avoids the "Security Block" crash
+                        return self._finalize_safe(log_entry, "text", message=clean_sql)
+                    # -----------------------------------------------------
+
                     # B. Safety Gate
                     safe_sql = SQLGuard.validate_and_fix(clean_sql)
                     
