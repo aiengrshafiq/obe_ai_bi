@@ -31,6 +31,7 @@
         
         /* Switcher Active State */
         .viz-btn.active { background-color: #eff6ff; color: #2563eb; border-color: #bfdbfe; font-weight: 600; }
+        .viz-btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     </style>
 </head>
 <body class="h-screen flex overflow-hidden bg-gray-50 text-slate-800">
@@ -114,7 +115,6 @@
         </header>
 
         <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth bg-[#f8fafc]">
-            
             <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up pt-4">
                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
                 <div class="bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
@@ -166,13 +166,24 @@
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
 
     <script>
+        // --- SECURITY HELPER: Prevent XSS ---
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return "";
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
         const token = localStorage.getItem('access_token');
         const username = localStorage.getItem('username');
 
         if (!token) window.location.href = "/login";
         if (username) {
-            document.getElementById('username-display').innerText = username;
-            document.getElementById('user-avatar').innerText = username.substring(0,2).toUpperCase();
+            document.getElementById('username-display').textContent = username; // Safer than innerText
+            document.getElementById('user-avatar').textContent = username.substring(0,2).toUpperCase();
         }
 
         function logout() { localStorage.clear(); window.location.href = "/login"; }
@@ -184,7 +195,6 @@
             overlay.classList.toggle('hidden');
         }
 
-        // Auto-resize textarea
         function autoResize(el) {
             el.style.height = 'auto';
             el.style.height = el.scrollHeight + 'px';
@@ -192,7 +202,7 @@
 
         let chatHistory = [];
         window.queryResults = {};
-        window.resultRegistry = {}; // Stores full chart/data config for switching
+        window.resultRegistry = {}; 
 
         function fillInput(text) {
             const input = document.getElementById('user-input');
@@ -222,7 +232,7 @@
             if (!text) return;
 
             input.value = '';
-            input.style.height = 'auto'; // Reset height
+            input.style.height = 'auto'; 
             input.disabled = true;
             btn.disabled = true;
             
@@ -262,6 +272,7 @@
             const container = document.getElementById('chat-container');
             const div = document.createElement('div');
             div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+            // Sanitize user input before display
             const safeText = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
             div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${safeText}</div>`;
             container.insertBefore(div, document.getElementById('scroll-anchor'));
@@ -289,14 +300,22 @@
             const container = document.getElementById('chat-container');
             const div = document.createElement('div');
             div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+            // Escape system message content
             div.innerHTML = `
                 <div class="w-10 h-10 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md">!</div>
-                <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${text}</div>`;
+                <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${escapeHtml(text)}</div>`;
             container.insertBefore(div, document.getElementById('scroll-anchor'));
             scrollToBottom();
         }
 
         function renderResponse(data) {
+            // Memory Cap: Keep only last 20 results in registry
+            const registryKeys = Object.keys(window.resultRegistry);
+            if (registryKeys.length > 20) {
+                delete window.resultRegistry[registryKeys[0]];
+                delete window.queryResults[registryKeys[0]];
+            }
+
             const container = document.getElementById('chat-container');
             const div = document.createElement('div');
             div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-8";
@@ -306,7 +325,7 @@
             if (data.type === 'error') {
                 content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    ${data.message}
+                    ${escapeHtml(data.message)}
                 </div>`;
             } else if (data.type === 'text') {
                 const rawHtml = marked.parse(data.message);
@@ -315,15 +334,15 @@
             } else {
                 const resultId = Date.now();
                 if(data.data) window.queryResults[resultId] = data.data;
-                window.resultRegistry[resultId] = data; // Store full data for Visual Switching
+                window.resultRegistry[resultId] = data; 
 
                 if (data.thought) {
                     content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none">
-                        <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${data.thought}</span>
+                        <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${escapeHtml(data.thought)}</span>
                     </div>`;
                 }
 
-                // SQL Block
+                // SQL Block (Safe Escaping)
                 content += `
                     <details class="group mb-4">
                         <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none transition-colors">
@@ -336,7 +355,7 @@
                                 <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
                                 <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
                             </div>
-                            <textarea class="w-full bg-slate-900 text-blue-300 font-mono text-xs p-4 pt-10 rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700 leading-relaxed" spellcheck="false" id="sql-${resultId}">${data.sql}</textarea>
+                            <textarea class="w-full bg-slate-900 text-blue-300 font-mono text-xs p-4 pt-10 rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700 leading-relaxed" spellcheck="false" id="sql-${resultId}">${escapeHtml(data.sql)}</textarea>
                             <div class="absolute top-2 right-2 flex gap-2">
                                 <button onclick="copyToClipboard('sql-${resultId}')" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 transition-colors" title="Copy SQL">📋</button>
                                 <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-3 py-1 rounded shadow transition-colors font-medium">Run Edit</button>
@@ -344,12 +363,11 @@
                         </div>
                     </details>`;
 
-                // --- VISUALIZATION CONTAINER ---
+                // Visualization
                 const chartId = 'viz-' + resultId;
                 const containerId = 'viz-container-' + resultId;
                 
                 if (data.visual_type === 'plotly' && data.plotly_code) {
-                    // Detect current type for button state
                     const currentType = data.plotly_code.data[0].type;
                     
                     content += `
@@ -369,7 +387,7 @@
                         </div>`;
 
                     setTimeout(() => {
-                        Plotly.purge(chartId); // Clean before new
+                        Plotly.purge(chartId);
                         Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
                     }, 50);
 
@@ -398,7 +416,7 @@
             scrollToBottom();
         }
 
-        // --- PRODUCTION GRADE VISUAL SWITCHER ---
+        // --- SMART VISUAL SWITCHER ---
         function switchVisual(id, type) {
             const entry = window.resultRegistry[id];
             const containerId = 'viz-container-' + id;
@@ -407,7 +425,7 @@
             
             if (!entry || !container) return;
 
-            // 1. Button Highlighting (Safe Data Attribute)
+            // Highlight Logic
             const toolbar = document.getElementById(toolbarId);
             if (toolbar) {
                 const buttons = toolbar.querySelectorAll('button');
@@ -420,45 +438,48 @@
                 });
             }
 
-            // 2. Table Mode
             if (type === 'table') {
                 container.innerHTML = generateTable(entry.data);
                 return;
             }
 
-            // 3. Reset Container for Chart
             const chartId = 'viz-' + id;
             container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>`;
             
-            // 4. Safe Deep Clone
             let layout = JSON.parse(JSON.stringify(entry.plotly_code.layout));
             let data = JSON.parse(JSON.stringify(entry.plotly_code.data));
 
-            // 5. Smart Type Switching Logic
-            // Safety Check for Pie
+            // --- DATA SAFETY CHECKS ---
+            const firstTrace = data[0];
+            const isNumericY = firstTrace.y.every(val => !isNaN(parseFloat(val)));
+
             if (type === 'pie') {
                 if (entry.data.length > 20) {
-                    alert("This dataset is too large for a Pie Chart (limit 20 rows).");
+                    alert("Dataset too large for Pie chart (Limit: 20 rows).");
                     return;
                 }
-                // Pie only supports the FIRST metric to avoid chaos
-                const firstTrace = data[0];
+                if (!isNumericY) {
+                    alert("Pie charts require numeric values.");
+                    return;
+                }
                 firstTrace.type = 'pie';
                 firstTrace.labels = firstTrace.x;
                 firstTrace.values = firstTrace.y;
-                firstTrace.x = null;
-                firstTrace.y = null;
+                firstTrace.x = null; firstTrace.y = null;
                 firstTrace.textinfo = "label+percent";
                 layout.xaxis = { visible: false };
                 layout.yaxis = { visible: false };
-                data = [firstTrace]; // Only show first trace
+                data = [firstTrace];
             } else {
-                // For Bar/Line/Area, apply to ALL traces (Multi-Series Support)
+                if ((type === 'line' || type === 'area') && !isNumericY) {
+                    alert("Line/Area charts require numeric values on Y-axis.");
+                    return; 
+                }
+                
                 data.forEach(trace => {
                     if (type === 'bar') {
                         trace.type = 'bar';
-                        trace.mode = undefined;
-                        trace.fill = undefined;
+                        trace.mode = undefined; trace.fill = undefined;
                     } else if (type === 'line') {
                         trace.type = 'scatter';
                         trace.mode = 'lines+markers';
@@ -473,56 +494,64 @@
                 });
             }
 
-            // 6. Purge and Re-Plot
             try {
-                Plotly.purge(chartId);
+                Plotly.purge(chartId); // Prevent Memory Leak
                 Plotly.newPlot(chartId, data, layout, {responsive: true, displayModeBar: false});
             } catch(e) {
-                console.error("Chart switch failed", e);
+                console.error("Switch failed", e);
             }
         }
-        // ------------------------------------
 
         function formatNumber(num) {
             return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
         }
 
-        function generateTable(data) {
+       function generateTable(data) {
             if (!data || data.length === 0) return '';
+            
+            // 1. ARCHITECTURAL FIX: 
+            // Create a shallow copy [...data] to avoid mutating the original array (which might be used by charts).
+            // Reverse it to show LATEST records first.
+            const displayData = [...data].reverse().slice(0, 10); 
+            
             const headers = Object.keys(data[0]);
             let rows = '';
             
-            data.slice(0, 10).forEach((row, idx) => {
+            displayData.forEach((row, idx) => {
                 const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
                 
                 const cells = Object.values(row).map((v, colIndex) => {
                     let displayVal = v;
                     const colName = headers[colIndex].toLowerCase(); 
                     
-                    // FIXED: Safer Number Formatting Check
-                    // If it's a number, format it.
-                    // If it's a string looking like an ID ("10005"), keep it raw.
                     const isIdCol = colName.includes('code') || colName.includes('id') || colName.endsWith('_id');
                     
                     if (typeof v === 'number' && !isIdCol) {
                         displayVal = formatNumber(v);
                     }
                     
-                    return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal}</td>`;
+                    return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${escapeHtml(displayVal)}</td>`;
                 }).join('');
 
                 rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">${cells}</tr>`;
             });
             
+            // 2. UX UPDATE: Change the footer text to be explicit about what is being shown.
+            const footerText = data.length > 10 
+                ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">
+                    Showing latest 10 of ${data.length} rows. <span class="font-semibold text-slate-500 cursor-pointer hover:text-blue-600" onclick="exportCSV(${Date.now()})">Download CSV</span> for full history.
+                </div>` 
+                : '';
+
             return `
                 <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm mt-2 max-h-[400px] overflow-y-auto">
                     <table class="min-w-full text-sm text-left relative border-collapse">
                         <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm">
-                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${h}</th>`).join('')}</tr>
+                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${escapeHtml(h)}</th>`).join('')}</tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">${rows}</tbody>
                     </table>
-                    ${data.length > 10 ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">Showing first 10 of ${data.length} rows. Download CSV for full data.</div>` : ''}
+                    ${footerText}
                 </div>`;
         }
 
