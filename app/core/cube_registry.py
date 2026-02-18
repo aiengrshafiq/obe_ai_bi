@@ -11,6 +11,7 @@ import app.cubes.referral_performance as referral_cube
 import app.cubes.points_system as points_cube
 import app.cubes.login_history as login_cube
 import app.cubes.device_log as device_cube
+import app.cubes.risk_blacklist as risk_cube
 
 class CubeMetadata(BaseModel):
     name: str
@@ -36,7 +37,7 @@ class CubeRegistry:
 
         cubes = [
             user_cube, trans_cube, trade_cube, referral_cube, 
-            points_cube, login_cube, device_cube
+            points_cube, login_cube, device_cube, risk_cube
         ]
 
         print("📦 Initializing Cube Registry...")
@@ -50,7 +51,7 @@ class CubeRegistry:
             # Infer Kind: 'di' (Daily Incremental) vs 'df' (Daily Snapshot)
             # Special Rule: user_profile_360 is a Snapshot ('df') logic even without suffix
             kind = "di"
-            if table_name.endswith("_df") or "user_profile_360" in table_name:
+            if table_name.endswith("_df") or "user_profile_360" or "blacklist" in table_name:
                 kind = "df"
             elif table_name.endswith("_di"):
                 kind = "di"
