@@ -1,19 +1,24 @@
 import json
 import re
+import asyncio
 import pandas as pd
 from app.services.vanna_wrapper import vn 
 
 class IntentAgent:
     """
     Classifies user message BEFORE generating SQL.
+    Acts as the 'Router' to decide if we need SQL, Chat, or Clarification.
     """
     
     SYSTEM_PROMPT = """
-    You are the Intent Classifier.
+    You are the Intent Classifier for a BI Copilot.
+    
     CATEGORIES:
-    1. 'data_query': asking for data, metrics, charts.
-    2. 'general_chat': greetings, non-data talk.
-    3. 'ambiguous': vague questions.
+    1. 'data_query': User is asking for data, metrics, charts, lists, or specific business info.
+    2. 'general_chat': Greetings, compliments, "thank you", or questions about the AI itself.
+    3. 'ambiguous': The question is gibberish, incomplete, or impossible to understand.
+    
+    INPUT: A fully resolved user question (context has already been added).
     
     OUTPUT: Valid JSON only. Example: {"intent_type": "data_query", "entities": []}
     """
@@ -23,9 +28,13 @@ class IntentAgent:
         prompt = f"{IntentAgent.SYSTEM_PROMPT}\nUSER MESSAGE: \"{user_msg}\""
         
         try:
-            empty_df = pd.DataFrame()
-            # Generate response
-            response_text = vn.generate_summary(question=prompt, df=empty_df)
+            # FIX: Run blocking LLM call in a thread to keep server responsive
+            # We pass an empty DF because generate_summary expects it
+            response_text = await asyncio.to_thread(
+                vn.generate_summary, 
+                question=prompt, 
+                df=pd.DataFrame()
+            )
             
             # Sanity check
             if not response_text:
@@ -38,9 +47,10 @@ class IntentAgent:
                 clean_json = json_match.group(0)
                 return json.loads(clean_json)
             else:
-                # If no JSON found, assume data_query (Safe Fallback)
+                # Fallback: If it looks like a question, assume data query
                 return {"intent_type": "data_query"}
             
-        except Exception:
-            # Suppress error printing to keep logs clean, since fallback works.
+        except Exception as e:
+            print(f"⚠️ Intent Classification Failed: {e}")
+            # Safe Fallback: Assume they want data
             return {"intent_type": "data_query"}

@@ -1,8 +1,9 @@
 # app/services/date_resolver.py
 import time
+import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy import text
-from app.db.session import SessionLocal
+from app.db.app_models import SessionLocal  # <--- FIXED IMPORT (Matches Orchestrator)
 from app.services.cache import cache
 
 class DateResolver:
@@ -12,12 +13,31 @@ class DateResolver:
     """
 
     @staticmethod
+    def _fetch_ds_from_db():
+        """
+        Synchronous helper to run in a thread.
+        """
+        db = SessionLocal()
+        try:
+            # We query user_profile_360 as the "Anchor Table"
+            result = db.execute(text("SELECT MAX(ds) FROM public.user_profile_360"))
+            row = result.fetchone()
+            if row and row[0]:
+                return str(row[0])
+            return None
+        except Exception as e:
+            print(f"⚠️ DateResolver DB Error: {e}")
+            return None
+        finally:
+            db.close()
+
+    @staticmethod
     async def get_latest_ds() -> str:
         """
         Returns the latest available partition 'YYYYMMDD'.
         Strategies:
         1. Memory Cache (Fastest)
-        2. DB Query (Source of Truth)
+        2. DB Query (Source of Truth) - Non-blocking
         3. Fallback (Yesterday)
         """
         # 1. Check Cache
@@ -25,22 +45,14 @@ class DateResolver:
         if cached_ds:
             return str(cached_ds)
 
-        # 2. Check DB
-        try:
-            async with SessionLocal() as session:
-                # We query user_profile_360 as the "Anchor Table"
-                # If this table has data, the warehouse load is likely done.
-                result = await session.execute(text("SELECT MAX(ds) FROM public.user_profile_360"))
-                row = result.fetchone()
-                
-                if row and row[0]:
-                    new_ds = str(row[0])
-                    # Cache for 1 hour
-                    cache.set("latest_ds", new_ds, ttl_seconds=3600)
-                    print(f"🔄 DateResolver: Refreshed latest_ds = {new_ds}")
-                    return new_ds
-        except Exception as e:
-            print(f"⚠️ DateResolver Error: {e}")
+        # 2. Check DB (Run sync DB call in a separate thread)
+        new_ds = await asyncio.to_thread(DateResolver._fetch_ds_from_db)
+        
+        if new_ds:
+            # Cache for 1 hour
+            cache.set("latest_ds", new_ds, ttl_seconds=3600)
+            print(f"🔄 DateResolver: Refreshed latest_ds = {new_ds}")
+            return new_ds
 
         # 3. Fallback: Yesterday
         fallback = (datetime.now() - timedelta(days=1)).strftime("%Y%m%d")

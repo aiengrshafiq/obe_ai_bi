@@ -25,6 +25,7 @@ from app.services.cache import cache
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
+# Auto error False allows us to handle both Token (API) and Cookie (Browser)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # --- Dependency: Get DB Session ---
@@ -45,7 +46,6 @@ async def get_current_user(
     user = None
     if token:
         user = verify_token(token, db)
-    
     
     # 2. If Header failed, Try Cookie (Browser navigation)
     if not user:
@@ -70,7 +70,7 @@ async def get_current_user(
 
 # 1. Login Endpoint (Public)
 @router.post("/token")
-async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)): # Added 'response: Response'
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)): 
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
@@ -101,7 +101,7 @@ def generate_id():
 async def register(
     user: UserRegister, 
     db = Depends(get_db), 
-    current_user: User = Depends(get_current_user) # <--- SECURITY LOCKED
+    current_user: User = Depends(get_current_user) 
 ):
     if db.query(User).filter(User.username == user.username).first():
         raise HTTPException(status_code=400, detail="User already exists")
@@ -124,14 +124,12 @@ async def login_page(request: Request):
 
 @router.get("/")
 async def get_chat_ui(request: Request):
-    # We leave the shell public, but the API calls inside it will fail if not logged in.
     return templates.TemplateResponse("chat.html", {"request": request})
 
 # --- PROTECTED PAGES (Admin Only) ---
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, current_user: User = Depends(get_current_user)):
-    # You cannot even see the registration form unless you are logged in.
     return templates.TemplateResponse("register.html", {"request": request, "user": current_user})
 
 @router.get("/admin/logs", response_class=HTMLResponse)
@@ -140,7 +138,7 @@ async def view_logs(
     db = Depends(get_db), 
     page: int = 1, 
     username: str = "",
-    current_user: User = Depends(get_current_user) # <--- SECURITY LOCKED
+    current_user: User = Depends(get_current_user) 
 ):
     page_size = 20
     query = db.query(ChatLog)
@@ -160,7 +158,7 @@ async def view_logs(
     })
 
 @router.get("/admin/knowledge_base", response_class=HTMLResponse)
-async def knowledge_base(request: Request, current_user: User = Depends(get_current_user)): # <--- SECURITY LOCKED
+async def knowledge_base(request: Request, current_user: User = Depends(get_current_user)): 
     return templates.TemplateResponse("knowledge_base.html", {"request": request, "user": current_user})
 
 # --- PROTECTED API ENDPOINTS ---
@@ -174,22 +172,19 @@ async def chat_endpoint(
     The Main Entry Point.
     Delegates all logic to the Orchestrator Pipeline.
     """
-    # 1. Ensure Date Context is Ready
-    await DateResolver.get_latest_ds()
+    # 1. Warm up cache (optional but good practice)
+    try:
+        await DateResolver.get_date_context()
+    except:
+        pass
     
     user_msg = payload.message.strip()
     
-    # 2. Build History Context
-    history_context = ""
-    if payload.history:
-        recent = payload.history[-4:] 
-        history_context = "PREVIOUS CONVERSATION:\n" + "\n".join(
-            [f"{msg['role'].upper()}: {msg['content']}" for msg in recent]
-        )
-
-    # 3. Run Pipeline
+    # 2. Run Pipeline
+    # FIX: Pass the RAW payload.history list, NOT a string.
+    # The Orchestrator needs the list for Context Resolution.
     orchestrator = Orchestrator(user=current_user.username)
-    result = await orchestrator.run_pipeline(user_msg, history_context)
+    result = await orchestrator.run_pipeline(user_msg, payload.history)
     
     return result
 

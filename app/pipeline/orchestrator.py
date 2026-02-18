@@ -3,9 +3,10 @@ import numpy as np
 import math
 import re
 import time
-import traceback  # <--- Added for visibility
+import traceback
+import asyncio
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 # Import Agents & Infrastructure
 from app.pipeline.agents.intent import IntentAgent
@@ -16,11 +17,12 @@ from app.services.vanna_wrapper import vn
 from app.db.app_models import ChatLog, SessionLocal
 from app.services.date_resolver import DateResolver
 from app.pipeline.prompts.sql_prompt import get_sql_system_prompt
+from app.pipeline.agents.context_resolver import ContextResolver
 
 class Orchestrator:
     """
     The Master Controller.
-    Flow: Intent -> SQL Gen -> Safety Check -> Execution -> Visualization
+    Flow: Context -> Intent -> SQL Gen -> Safety Check -> Execution -> Visualization
     """
     
     def __init__(self, user: str):
@@ -38,13 +40,40 @@ class Orchestrator:
         if isinstance(obj, (list, tuple)): return [self._json_safe(v) for v in obj]
         return str(obj)
 
-    async def run_pipeline(self, user_msg: str, history_context: str) -> Dict[str, Any]:
+    # FIX: Updated signature to accept List (raw_history) instead of String
+    async def run_pipeline(self, user_msg: str, raw_history: List[Dict[str, str]]) -> Dict[str, Any]:
         """Executes the full Intelligence Pipeline with Self-Correction."""
         start_time = time.time()
         
+        # --- STEP 0: CONTEXT RESOLUTION (Structured) ---
+        final_msg = user_msg
+        context_metadata = {}
+
+        if raw_history:
+            # Run the resolver in a thread to be safe
+            resolution = await asyncio.to_thread(ContextResolver.resolve, user_msg, raw_history)
+            
+            # Logic: If high confidence rewrite, use it.
+            if resolution.get("confidence", 0) > 0.6:
+                final_msg = resolution["rewritten_query"]
+                context_metadata = resolution
+                print(f"🔄 Context Rewritten: '{user_msg}' -> '{final_msg}'")
+            else:
+                print(f"⚠️ Context skipped (Low Confidence): Using original message.")
+        # -----------------------------------------------
+
+        # 1. Build Legacy String Context (For the SQL Prompt)
+        # We still pass this to SQLAgent so it sees the conversation flow
+        history_context = ""
+        if raw_history:
+             recent = raw_history[-4:]
+             history_context = "PREVIOUS CONVERSATION:\n" + "\n".join(
+                 [f"{msg.get('role', 'unknown').upper()}: {str(msg.get('content',''))[:200]}..." for msg in recent]
+             )
+
         log_entry = ChatLog(
             username=self.user, 
-            user_question=user_msg, 
+            user_question=final_msg, # Log the RESOLVED question
             context_provided=history_context,
             correction_attempts=0
         )
@@ -53,7 +82,7 @@ class Orchestrator:
 
         try:
             # --- STEP 1: INTENT ---
-            intent_result = await IntentAgent.classify(user_msg)
+            intent_result = await IntentAgent.classify(final_msg)
             
             if intent_result.get("intent_type") == "general_chat":
                 return self._finalize_safe(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
@@ -73,8 +102,8 @@ class Orchestrator:
             attempts = 0
             last_error = None
             
-            # Initial Prompt
-            current_prompt = self._build_prompt(user_msg, history_context, intent_result, date_context)
+            # Initial Prompt (Uses FINAL_MSG)
+            current_prompt = self._build_prompt(final_msg, history_context, intent_result, date_context)
             
             while attempts <= max_retries:
                 # Initialize variables to avoid UnboundLocalError
@@ -96,8 +125,6 @@ class Orchestrator:
                     # --- NEW FIX: Handle "I don't know" text responses ---
                     # If it doesn't start with SELECT/WITH, it's not SQL. Don't parse it.
                     if not re.match(r'^\s*(SELECT|WITH)\b', clean_sql, re.IGNORECASE):
-                        # Treat this as a clarification or error message from the AI
-                        # This avoids the "Security Block" crash
                         return self._finalize_safe(log_entry, "text", message=clean_sql)
                     # -----------------------------------------------------
 
@@ -130,7 +157,7 @@ class Orchestrator:
                     # LOGGING: Row Count
                     log_entry.row_count = len(df)
                     
-                    viz_result = await VisualizationAgent.determine_format(df, final_sql, user_msg, intent_result)
+                    viz_result = await VisualizationAgent.determine_format(df, final_sql, final_msg, intent_result) # <--- Passed final_msg
                     
                     # LOGGING: Visual Type
                     visual_type = viz_result.get("visual_type", "table")
@@ -150,19 +177,15 @@ class Orchestrator:
                     return self._json_safe(result)
 
                 except SQLPolicyException as pe:
-                    # Security violation = No retry
                     return self._finalize_safe(log_entry, "error", message=f"Security Block: {str(pe)}")
                 
                 except Exception as e:
-                    # Runtime Error = Retry
                     last_error = str(e)
                     attempts += 1
                     print(f"⚠️ SQL Fail (Attempt {attempts}): {last_error}")
                     
                     if attempts <= max_retries:
-                        # Fallback if clean_sql wasn't generated
                         sql_context = clean_sql if clean_sql else "NO_SQL_GENERATED"
-                        
                         current_prompt = (
                             f"The previous SQL you generated failed.\n"
                             f"FAILED SQL: {sql_context}\n"
@@ -178,9 +201,8 @@ class Orchestrator:
             return self._finalize_safe(log_entry, "error", message=f"I tried to run the query, but it kept failing: {last_error}")
 
         except Exception as e:
-            # THIS IS WHERE YOUR ERROR WAS HIDDEN
             print(f"Orchestrator Fatal Error: {e}")
-            traceback.print_exc()  # <--- Now you will see the full error in logs
+            traceback.print_exc()
             return self._finalize_safe(log_entry, "error", message="An internal system error occurred.")
         finally:
             self.db.close()

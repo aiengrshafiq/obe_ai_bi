@@ -1,18 +1,30 @@
 # app/db/app_models.py
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, BigInteger, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime
 from app.core.config import settings
 
-# 1. Connect to Hologres (Sync Driver)
+# --- 1. Database Connection (Synchronous / Blocking) ---
+# We force 'psycopg2' because Vanna/Pandas and Hologres work best with the standard driver.
+# If config has 'postgresql+asyncpg', we strip it back to 'postgresql+psycopg2'.
 APP_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "+psycopg2")
-engine = create_engine(APP_DB_URL, pool_pre_ping=True)
 
+# Create Engine with Keep-Alive (pool_pre_ping) to handle Hologres timeouts
+engine = create_engine(
+    APP_DB_URL, 
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20
+)
+
+# Session Factory (This is what Orchestrator & DateResolver use)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Base Class for Models
 Base = declarative_base()
 
-# 2. Define Models in the 'ai_pilot' Schema
+# --- 2. Define Models in the 'ai_pilot' Schema ---
+
 class User(Base):
     __tablename__ = "users"
     # This tells SQLAlchemy the table lives in the 'ai_pilot' schema
@@ -33,12 +45,14 @@ class ChatLog(Base):
     username = Column(String)
     user_question = Column(Text)
     context_provided = Column(Text)
+    
+    # AI Output
     generated_sql = Column(Text)
     error_message = Column(Text, nullable=True)
     execution_success = Column(Boolean, default=False)
-    cube_used = Column(String, nullable=True)
     
-    # --- NEW METRICS (Measurable Proof) ---
+    # Telemetry & Debugging
+    cube_used = Column(String, nullable=True)
     resolved_latest_ds = Column(String, nullable=True)
     row_count = Column(BigInteger, nullable=True)
     execution_ms = Column(BigInteger, nullable=True)
@@ -46,5 +60,5 @@ class ChatLog(Base):
     correction_attempts = Column(Integer, default=0)
     tables_used = Column(Text, nullable=True)
 
-# Note: We skip 'Base.metadata.create_all' here because we ran the DDL manually.
-# This prevents permission errors on startup.
+# Note: We purposely skip 'Base.metadata.create_all' to avoid permission issues.
+# Tables should be managed via DDL scripts in Alibaba Cloud.
