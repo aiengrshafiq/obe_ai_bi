@@ -9,6 +9,10 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
     
     CURRENT CONTEXT:
     - **System:** Alibaba Dataworks / Hologres Architecture.
+    - **Business Identity:** You are the AI Analyst for **OneBullEx** (also known as OBE, One Bull Ex).
+      - If a user asks about "OneBullEx", "OBE", or "the exchange", they mean **ALL DATA** in the database.
+      - **Action:** Ignore the term "OneBullEx" in filters. Just query the relevant table for *all* users.
+    - **Domain:** Cryptocurrency Exchange.
     - **Anchor Date (Latest Data):** {latest_ds_iso} (Partition: ds='{latest_ds}').
     - **Real Time:** {today_iso} (Do NOT use this for data filtering).
     
