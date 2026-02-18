@@ -28,6 +28,9 @@
         .prose code { background-color: #f1f5f9; padding: 2px 4px; rounded: 4px; font-family: monospace; font-size: 0.9em; color: #ef4444; }
         .prose pre { background-color: #1e293b; color: #e2e8f0; padding: 1rem; rounded-lg; overflow-x: auto; margin-bottom: 1rem; }
         .prose pre code { background-color: transparent; color: inherit; padding: 0; }
+        
+        /* Switcher Active State */
+        .viz-btn.active { background-color: #eff6ff; color: #2563eb; border-color: #bfdbfe; font-weight: 600; }
     </style>
 </head>
 <body class="h-screen flex overflow-hidden bg-gray-50 text-slate-800">
@@ -189,6 +192,7 @@
 
         let chatHistory = [];
         window.queryResults = {};
+        window.resultRegistry = {}; // Stores full chart/data config for switching
 
         function fillInput(text) {
             const input = document.getElementById('user-input');
@@ -258,7 +262,6 @@
             const container = document.getElementById('chat-container');
             const div = document.createElement('div');
             div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
-            // Sanitized user input display (even though it's local)
             const safeText = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
             div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${safeText}</div>`;
             container.insertBefore(div, document.getElementById('scroll-anchor'));
@@ -306,22 +309,21 @@
                     ${data.message}
                 </div>`;
             } else if (data.type === 'text') {
-                // MARKDOWN PARSING + SANITIZATION
                 const rawHtml = marked.parse(data.message);
                 const safeHtml = DOMPurify.sanitize(rawHtml);
                 content = `<div class="text-slate-700 text-sm leading-relaxed prose">${safeHtml}</div>`;
             } else {
                 const resultId = Date.now();
                 if(data.data) window.queryResults[resultId] = data.data;
+                window.resultRegistry[resultId] = data; // Store full data for Visual Switching
 
-                // Thought / Logic Block
                 if (data.thought) {
                     content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none">
                         <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${data.thought}</span>
                     </div>`;
                 }
 
-                // SQL Block (VS Code Style)
+                // SQL Block
                 content += `
                     <details class="group mb-4">
                         <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none transition-colors">
@@ -342,27 +344,41 @@
                         </div>
                     </details>`;
 
-                // Visualization
+                // --- VISUALIZATION CONTAINER ---
+                const chartId = 'viz-' + resultId;
+                const containerId = 'viz-container-' + resultId;
+                
                 if (data.visual_type === 'plotly' && data.plotly_code) {
-                    const chartId = 'viz-' + resultId;
+                    // Detect current type for button state
+                    const currentType = data.plotly_code.data[0].type;
+                    
+                    content += `
+                    <div class="flex gap-1.5 mb-2 overflow-x-auto no-scrollbar pb-1" id="toolbar-${resultId}">
+                        <button onclick="switchVisual(${resultId}, 'bar')" data-type="bar" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'bar' ? 'active' : ''}">📊 Bar</button>
+                        <button onclick="switchVisual(${resultId}, 'line')" data-type="line" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'scatter' ? 'active' : ''}">📈 Line</button>
+                        <button onclick="switchVisual(${resultId}, 'area')" data-type="area" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">📉 Area</button>
+                        <button onclick="switchVisual(${resultId}, 'pie')" data-type="pie" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🥧 Pie</button>
+                        <button onclick="switchVisual(${resultId}, 'table')" data-type="table" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🔢 Table</button>
+                    </div>`;
+                    
                     content += `
                         <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm mb-4">
-                            <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
+                            <div id="${containerId}" class="w-full">
+                                <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
+                            </div>
                         </div>`;
+
                     setTimeout(() => {
-                        Plotly.purge(chartId);
+                        Plotly.purge(chartId); // Clean before new
                         Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
                     }, 50);
-                } 
-                
-                // Table
-                if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
-                    content += generateTable(data.data);
-                } else if (data.visual_type !== 'plotly') {
+
+                } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
+                    content += `<div id="${containerId}">${generateTable(data.data)}</div>`;
+                } else {
                     content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
                 }
 
-                // CSV Download
                 if (data.data && data.data.length > 0) {
                     content += `
                         <div class="mt-3 flex gap-2 justify-end">
@@ -382,7 +398,91 @@
             scrollToBottom();
         }
 
-        // Helper: Format Numbers with Commas
+        // --- PRODUCTION GRADE VISUAL SWITCHER ---
+        function switchVisual(id, type) {
+            const entry = window.resultRegistry[id];
+            const containerId = 'viz-container-' + id;
+            const container = document.getElementById(containerId);
+            const toolbarId = 'toolbar-' + id;
+            
+            if (!entry || !container) return;
+
+            // 1. Button Highlighting (Safe Data Attribute)
+            const toolbar = document.getElementById(toolbarId);
+            if (toolbar) {
+                const buttons = toolbar.querySelectorAll('button');
+                buttons.forEach(btn => {
+                    if (btn.getAttribute('data-type') === type) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+            }
+
+            // 2. Table Mode
+            if (type === 'table') {
+                container.innerHTML = generateTable(entry.data);
+                return;
+            }
+
+            // 3. Reset Container for Chart
+            const chartId = 'viz-' + id;
+            container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>`;
+            
+            // 4. Safe Deep Clone
+            let layout = JSON.parse(JSON.stringify(entry.plotly_code.layout));
+            let data = JSON.parse(JSON.stringify(entry.plotly_code.data));
+
+            // 5. Smart Type Switching Logic
+            // Safety Check for Pie
+            if (type === 'pie') {
+                if (entry.data.length > 20) {
+                    alert("This dataset is too large for a Pie Chart (limit 20 rows).");
+                    return;
+                }
+                // Pie only supports the FIRST metric to avoid chaos
+                const firstTrace = data[0];
+                firstTrace.type = 'pie';
+                firstTrace.labels = firstTrace.x;
+                firstTrace.values = firstTrace.y;
+                firstTrace.x = null;
+                firstTrace.y = null;
+                firstTrace.textinfo = "label+percent";
+                layout.xaxis = { visible: false };
+                layout.yaxis = { visible: false };
+                data = [firstTrace]; // Only show first trace
+            } else {
+                // For Bar/Line/Area, apply to ALL traces (Multi-Series Support)
+                data.forEach(trace => {
+                    if (type === 'bar') {
+                        trace.type = 'bar';
+                        trace.mode = undefined;
+                        trace.fill = undefined;
+                    } else if (type === 'line') {
+                        trace.type = 'scatter';
+                        trace.mode = 'lines+markers';
+                        trace.fill = 'none';
+                        trace.line = { shape: 'spline', width: 3 }; 
+                    } else if (type === 'area') {
+                        trace.type = 'scatter';
+                        trace.mode = 'lines';
+                        trace.fill = 'tozeroy';
+                        trace.line = { shape: 'spline' };
+                    }
+                });
+            }
+
+            // 6. Purge and Re-Plot
+            try {
+                Plotly.purge(chartId);
+                Plotly.newPlot(chartId, data, layout, {responsive: true, displayModeBar: false});
+            } catch(e) {
+                console.error("Chart switch failed", e);
+            }
+        }
+        // ------------------------------------
+
         function formatNumber(num) {
             return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
         }
@@ -395,18 +495,17 @@
             data.slice(0, 10).forEach((row, idx) => {
                 const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
                 
-                // Map over values, but use the INDEX to look up the header name
                 const cells = Object.values(row).map((v, colIndex) => {
                     let displayVal = v;
-                    const colName = headers[colIndex].toLowerCase(); // Get column name
+                    const colName = headers[colIndex].toLowerCase(); 
                     
-                    // INTELLIGENT FORMATTING RULE:
-                    // Only add commas if it is a number AND NOT an ID column ('code', 'id')
-                    if (typeof v === 'number') {
-                        if (!colName.includes('code') && !colName.includes('id') && !colName.endsWith('_id')) {
-                            displayVal = formatNumber(v);
-                        }
-                        // If it IS an ID, keep it raw (e.g. 10000047)
+                    // FIXED: Safer Number Formatting Check
+                    // If it's a number, format it.
+                    // If it's a string looking like an ID ("10005"), keep it raw.
+                    const isIdCol = colName.includes('code') || colName.includes('id') || colName.endsWith('_id');
+                    
+                    if (typeof v === 'number' && !isIdCol) {
+                        displayVal = formatNumber(v);
                     }
                     
                     return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal}</td>`;
