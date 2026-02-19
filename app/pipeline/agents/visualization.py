@@ -144,30 +144,29 @@ class VisualizationAgent:
 
         # 4. LLM Chart Logic
         prompt = f"""
-        You are a Data Visualization Expert.
+        You are a strict Data Visualization API. You do not speak English. You ONLY output raw JSON.
         User Question: "{user_question}"
         Data Columns: {columns}
         Data Sample (Top 3 rows):
         {df.head(3).to_string(index=False)}
 
-        Task: Return a JSON object to visualize this data.
-        
         CRITICAL RULES:
-        1. YOU MUST OUTPUT ONLY VALID JSON.
-        2. DO NOT OUTPUT SQL. DO NOT WRITE ANY SELECT STATEMENTS.
-        3. Choose best 'chart_type': 'bar', 'line', 'scatter', 'area'. (DO NOT USE PIE. If pie is requested, default to 'bar').
-        4. Identify 'x_column' (categories/dates) and 'y_column' (values).
-        5. If multiple series, set 'color_column' or use 'y_column': ['col1', 'col2'].
-        6. Provide a 'title'.
+        1. OUTPUT EXACTLY ONE JSON OBJECT. 
+        2. DO NOT WRITE ANY EXPLANATIONS, GREETINGS, OR TEXT BEFORE OR AFTER THE JSON.
+        3. DO NOT OUTPUT SQL.
+        4. Choose best 'chart_type': 'bar', 'line', 'scatter', 'area'. (DO NOT USE PIE. If pie is requested, default to 'bar').
+        5. Identify 'x_column' (categories/dates) and 'y_column' (values) from the Data Columns provided.
+        6. Provide a short 'title'.
 
         Response Format (JSON ONLY):
         {{
             "chart_type": "bar",
-            "x_column": "registration_date",
-            "y_column": "user_count",
-            "title": "Daily Registrations",
+            "x_column": "root_user_code",
+            "y_column": "total_referral_volume",
+            "title": "Top Partners by Volume",
             "color_column": null
         }}
+        
         """
 
         try:
