@@ -215,7 +215,7 @@ class Orchestrator:
             self.db.close()
 
     # --- HELPERS ---
-   def _build_prompt(self, msg, history, intent, date_ctx):
+    def _build_prompt(self, msg, history, intent, date_ctx):
         return get_sql_system_prompt(
             history=history,
             intent_type=intent.get('intent_type'),
