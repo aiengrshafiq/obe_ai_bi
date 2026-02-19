@@ -215,7 +215,7 @@ class Orchestrator:
             self.db.close()
 
     # --- HELPERS ---
-    def _build_prompt(self, msg, history, intent, date_ctx):
+   def _build_prompt(self, msg, history, intent, date_ctx):
         return get_sql_system_prompt(
             history=history,
             intent_type=intent.get('intent_type'),
@@ -223,10 +223,11 @@ class Orchestrator:
             latest_ds=date_ctx['latest_ds'],
             latest_ds_iso=date_ctx['latest_ds_dash'],
             today_iso=date_ctx['today_iso'],
-            start_7d=date_ctx['start_7d_dash'], # Use dash version for standard SQL dates
-            start_this_month=date_ctx['start_this_month_dash'], # <--- NEW
-            start_last_month=date_ctx['start_last_month_dash'], # <--- NEW
-            end_last_month=date_ctx['end_last_month_dash'],     # <--- NEW
+            start_7d=date_ctx['start_7d'],              # Passed to original slot
+            start_7d_dash=date_ctx['start_7d_dash'],    # <--- CRITICAL FIX (Match prompt sig)
+            start_this_month=date_ctx['start_this_month_dash'], 
+            start_last_month=date_ctx['start_last_month_dash'], 
+            end_last_month=date_ctx['end_last_month_dash'],     
             user_msg=msg
         )
 

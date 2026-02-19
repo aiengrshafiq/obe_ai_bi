@@ -1,6 +1,5 @@
 # app/pipeline/prompts/sql_prompt.py
-
-def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_iso, today_iso, start_7d, start_this_month, start_last_month, end_last_month, user_msg):
+def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_iso, today_iso, start_7d, start_7d_dash, start_this_month, start_last_month, end_last_month, user_msg):
     """
     Returns the formatted system prompt for SQL generation.
     """
