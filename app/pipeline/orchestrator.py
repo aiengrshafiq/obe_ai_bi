@@ -223,7 +223,10 @@ class Orchestrator:
             latest_ds=date_ctx['latest_ds'],
             latest_ds_iso=date_ctx['latest_ds_dash'],
             today_iso=date_ctx['today_iso'],
-            start_7d=date_ctx['start_7d'],
+            start_7d=date_ctx['start_7d_dash'], # Use dash version for standard SQL dates
+            start_this_month=date_ctx['start_this_month_dash'], # <--- NEW
+            start_last_month=date_ctx['start_last_month_dash'], # <--- NEW
+            end_last_month=date_ctx['end_last_month_dash'],     # <--- NEW
             user_msg=msg
         )
 

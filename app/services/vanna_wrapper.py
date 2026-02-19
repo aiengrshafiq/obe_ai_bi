@@ -18,6 +18,7 @@ class OneBullexVanna(ChromaDB_VectorStore, OpenAI_Chat):
         OpenAI_Chat.__init__(self, config={
             'api_key': settings.DASHSCOPE_API_KEY,
             'model': settings.AI_MODEL_NAME,
+            'temperature': 0.0,
         })
         
         # 3. CRITICAL: FORCE ALIBABA CONNECTION
@@ -26,7 +27,7 @@ class OneBullexVanna(ChromaDB_VectorStore, OpenAI_Chat):
             api_key=settings.DASHSCOPE_API_KEY,
             base_url=settings.AI_BASE_URL,
         )
-        print(f"✅ Vanna Client Forced to URL: {settings.AI_BASE_URL}")
+        print(f"✅ Vanna Client Forced to URL: {settings.AI_BASE_URL} (Temp: 0.0)")
         
         # 4. Connect the Safe Runner
         self.run_sql = self._custom_run_sql

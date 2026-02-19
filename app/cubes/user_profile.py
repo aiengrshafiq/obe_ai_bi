@@ -4,7 +4,8 @@
 NAME = "User Profile Cube"
 DESCRIPTION = "Contains daily snapshots of user profiles, lifetime stats, risk scores, and current balances."
 HAS_TIME_FIELD = True
-TIME_COLUMN = "registration_date"
+TIME_COLUMN = "registration_date_only"
+KIND = "df"
 # 2. DDL (The Structure)
 # Note: Copied exactly from your validated schema.
 DDL = """
@@ -131,21 +132,14 @@ EXAMPLES = [
             (SELECT COUNT(DISTINCT user_code) FROM public.dwd_login_history_log_di WHERE ds BETWEEN '{start_30d}' AND '{latest_ds}') as MAU;
         """
     },
-
-    # CASE 4: User Acquisition Funnel (Long Format for Charting)
-    # Strategy: Use UNION ALL to create a format Plotly understands easily
     {
         "question": "Generate a user acquisition funnel for the past week.",
         "sql": """
-        SELECT '1_Browsing' as stage, COUNT(DISTINCT user_code) as user_count FROM public.dwd_user_device_log_di WHERE ds >= '{latest_ds}'::DATE - INTERVAL '7 days'
+        SELECT '1_Browsing' as stage, COUNT(DISTINCT user_code) as user_count FROM public.dwd_user_device_log_di WHERE ds >= '{start_7d}'
         UNION ALL
-        SELECT '2_Registration', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE registration_date >= NOW() - INTERVAL '7 days' AND ds = '{latest_ds}'
+        SELECT '2_Registration', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE registration_date_only >= '{start_7d_dash}' AND ds = '{latest_ds}'
         UNION ALL
         SELECT '3_Login', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE is_active_user_7d = 1 AND ds = '{latest_ds}'
-        UNION ALL
-        SELECT '4_Deposit', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE first_deposit_date >= NOW() - INTERVAL '7 days' AND ds = '{latest_ds}'
-        UNION ALL
-        SELECT '5_Trading', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE is_active_trader_7d = 1 AND ds = '{latest_ds}'
         ORDER BY stage;
         """
     }

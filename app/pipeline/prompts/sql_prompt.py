@@ -1,6 +1,6 @@
 # app/pipeline/prompts/sql_prompt.py
 
-def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_iso, today_iso, start_7d, user_msg):
+def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_iso, today_iso, start_7d, start_this_month, start_last_month, end_last_month, user_msg):
     """
     Returns the formatted system prompt for SQL generation.
     """
@@ -38,10 +38,14 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
          - *User asks:* "Trend of user registration"
          - *SQL:* `SELECT registration_date_only, COUNT(user_code) FROM user_profile_360 WHERE ds = '{latest_ds}' GROUP BY 1 ORDER BY 1`
     
-     3. **TIME HANDLING:**
-       - **NEVER** use `NOW()`, `CURRENT_TIMESTAMP`, or `INTERVAL 'hours'`.
-       - **Batch Limitation:** If user asks for "Last X Hours", "Today", or "Real Time", assume they mean **Latest Available Daily Data** (`ds='{latest_ds}'`).
-       - User "Last 7 Days" = `'{start_7d}'` to `'{latest_ds}'`.
+     3. **TIME HANDLING & DATE DICTIONARY (STRICT):**
+       - **NEVER** use `NOW()`, `CURRENT_TIMESTAMP`, `CURRENT_DATE`, or `INTERVAL`.
+       - You MUST map English time phrases to these EXACT hardcoded dates:
+         - "Today" / "Current" / "Real Time" -> Use `ds = '{latest_ds}'`
+         - "Last 7 Days" -> Use `>= '{start_7d}'` (or `{start_7d_dash}` for date columns)
+         - "This Month" / "Current Month" -> Use `>= '{start_this_month}'`
+         - "Last Month" / "Previous Month" -> Use `BETWEEN '{start_last_month}' AND '{end_last_month}'`
+       - If a user asks for "Trend for Last Month", you MUST use the exact BETWEEN clause above.
     
     CRITICAL TREND/HISTORY RULES:
     1. **The "Recent History" Rule:** If the user asks for a "Trend" or "History" **without a specific date range**, **apply a default filter**:

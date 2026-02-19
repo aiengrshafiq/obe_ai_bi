@@ -59,31 +59,37 @@ class DateResolver:
         print(f"⚠️ DateResolver: Using Fallback {fallback}")
         return fallback
 
+    
     @staticmethod
     async def get_date_context() -> dict:
-        """
-        Returns a dictionary of date variables to inject into the LLM Prompt.
-        """
         latest_ds = await DateResolver.get_latest_ds()
-        
-        # Parse logic
         dt_current = datetime.strptime(latest_ds, "%Y%m%d")
         
-        # Formats
+        # Existing formats
         latest_ds_dash = dt_current.strftime("%Y-%m-%d")
-        
-        # Ranges
         start_7d = (dt_current - timedelta(days=6)).strftime("%Y%m%d")
+        start_7d_dash = (dt_current - timedelta(days=6)).strftime("%Y-%m-%d")
         start_30d = (dt_current - timedelta(days=29)).strftime("%Y%m%d")
+        start_30d_dash = (dt_current - timedelta(days=29)).strftime("%Y-%m-%d")
         
-        # First day of current month
-        start_month = dt_current.replace(day=1).strftime("%Y%m%d")
+        # NEW: Precise Calendar Month Logic
+        # This Month Start
+        start_this_month = dt_current.replace(day=1)
+        
+        # Last Month Start & End
+        # Go back 1 day from the start of this month to get the last day of last month
+        end_last_month = start_this_month - timedelta(days=1)
+        start_last_month = end_last_month.replace(day=1)
 
         return {
-            "latest_ds": latest_ds,             # '20260212'
-            "latest_ds_dash": latest_ds_dash,   # '2026-02-12'
-            "today_iso": datetime.now().strftime("%Y-%m-%d"), # Real world today
+            "latest_ds": latest_ds,             
+            "latest_ds_dash": latest_ds_dash,   
+            "today_iso": datetime.now().strftime("%Y-%m-%d"),
             "start_7d": start_7d,
+            "start_7d_dash": start_7d_dash,
             "start_30d": start_30d,
-            "start_month": start_month
+            "start_30d_dash": start_30d_dash,
+            "start_this_month_dash": start_this_month.strftime("%Y-%m-%d"),
+            "start_last_month_dash": start_last_month.strftime("%Y-%m-%d"),
+            "end_last_month_dash": end_last_month.strftime("%Y-%m-%d")
         }

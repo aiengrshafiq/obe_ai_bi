@@ -4,6 +4,7 @@ NAME = "Trade Activity Cube"
 DESCRIPTION = "Contains individual trade execution details. Use for volume, fees, trade duration, risk analysis, and margin usage."
 HAS_TIME_FIELD = True
 TIME_COLUMN = "trade_datetime"
+KIND = "di"
 # 1. DDL (Expanded with BI Metrics)
 DDL = """
 CREATE TABLE public.dws_all_trades_di (

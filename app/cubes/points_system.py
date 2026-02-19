@@ -4,6 +4,7 @@ NAME = "Points System Cube"
 DESCRIPTION = "Tracks user points generation (Tasks), consumption, and campaign activities like Lucky Spin and Check-ins."
 HAS_TIME_FIELD = True
 TIME_COLUMN = "created_at"
+KIND = "di"
 # 1. DDL
 DDL = """
 CREATE TABLE public.dwd_activity_t_points_user_task_di (

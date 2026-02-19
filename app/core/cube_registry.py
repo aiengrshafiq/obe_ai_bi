@@ -43,29 +43,24 @@ class CubeRegistry:
         print("📦 Initializing Cube Registry...")
         
         for cube in cubes:
-            table_name = cls._extract_table_name(cube.DDL)
-            if not table_name:
-                print(f"⚠️ Warning: Could not parse table name for cube {cube.NAME}")
-                continue
+                table_name = cls._extract_table_name(cube.DDL)
+                if not table_name:
+                    continue
 
-            # Infer Kind: 'di' (Daily Incremental) vs 'df' (Daily Snapshot)
-            # Special Rule: user_profile_360 is a Snapshot ('df') logic even without suffix
-            kind = "di"
-            if table_name.endswith("_df") or "user_profile_360" or "blacklist" in table_name:
-                kind = "df"
-            elif table_name.endswith("_di"):
-                kind = "di"
+                # EXACT MATCHING (No guessing)
+                # We look for KIND in the cube file. Default to 'di' if missing.
+                kind = getattr(cube, "KIND", "di").lower()
 
-            metadata = CubeMetadata(
-                name=cube.NAME,
-                table_name=table_name,
-                kind=kind,
-                time_column=getattr(cube, "TIME_COLUMN", None),
-                description=cube.DESCRIPTION,
-                ddl=cube.DDL,
-                docs=cube.DOCS,
-                examples=cube.EXAMPLES
-            )
+                metadata = CubeMetadata(
+                    name=cube.NAME,
+                    table_name=table_name,
+                    kind=kind,
+                    time_column=getattr(cube, "TIME_COLUMN", None),
+                    description=cube.DESCRIPTION,
+                    ddl=cube.DDL,
+                    docs=cube.DOCS,
+                    examples=cube.EXAMPLES
+                )
 
             cls._registry[table_name] = metadata
             print(f"   -> Registered: {table_name} [{kind.upper()}]")
