@@ -336,6 +336,25 @@
                 if(data.data) window.queryResults[resultId] = data.data;
                 window.resultRegistry[resultId] = data; 
 
+                // --- 1. RENDER CHIPS (NEW) ---
+            let chipsHtml = '';
+            if (data.suggestions && data.suggestions.length > 0) {
+                    content += `<div class="flex flex-wrap gap-2 mb-3 fade-in-up" style="animation-delay: 0.1s">`;
+                    data.suggestions.forEach(chip => {
+                        // Securely encode the prompt string
+                        const safePrompt = escapeHtml(chip.prompt); 
+                        const safeLabel = escapeHtml(chip.label);
+                        
+                        content += `
+                            <button onclick="fillInput('${safePrompt}'); sendMessage()" 
+                                class="text-[11px] font-medium text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm">
+                                <span class="text-blue-400 font-bold">+</span> ${safeLabel}
+                            </button>`;
+                    });
+                    content += `</div>`;
+                }
+            // -----------------------------
+
                 if (data.thought) {
                     content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none">
                         <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${escapeHtml(data.thought)}</span>
@@ -410,7 +429,7 @@
 
             div.innerHTML = `
                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white mt-1">AI</div>
-                <div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content}</div>`;
+                <div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content} ${chipsHtml}</div>`;
             
             container.insertBefore(div, document.getElementById('scroll-anchor'));
             scrollToBottom();

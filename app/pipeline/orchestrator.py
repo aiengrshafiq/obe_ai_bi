@@ -18,6 +18,8 @@ from app.db.app_models import ChatLog, SessionLocal
 from app.services.date_resolver import DateResolver
 from app.pipeline.prompts.sql_prompt import get_sql_system_prompt
 from app.pipeline.agents.context_resolver import ContextResolver
+from app.pipeline.agents.suggestion import SuggestionAgent
+
 
 class Orchestrator:
     """
@@ -162,6 +164,10 @@ class Orchestrator:
                     # LOGGING: Visual Type
                     visual_type = viz_result.get("visual_type", "table")
                     log_entry.visual_type = visual_type
+
+                    # --- NEW: Generate Suggestions ---
+                    suggestions = SuggestionAgent.generate(df, final_msg)
+                    # ---------------------------------
                     
                     df_safe = df.where(pd.notnull(df), None)
                     safe_data = df_safe.head(5000 if visual_type == "plotly" else 100).to_dict(orient='records')
@@ -172,6 +178,7 @@ class Orchestrator:
                     result = self._finalize(
                         log_entry, "success", sql=final_sql, data=safe_data,
                         visual_type=visual_type, plotly_code=viz_result.get("plotly_code"), 
+                        suggestions=suggestions,
                         thought=f"Pipeline: Intent={intent_result.get('intent_type')} -> SQL -> {viz_result.get('thought')}"
                     )
                     return self._json_safe(result)
