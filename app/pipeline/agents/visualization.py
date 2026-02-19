@@ -150,13 +150,15 @@ class VisualizationAgent:
         Data Sample (Top 3 rows):
         {df.head(3).to_string(index=False)}
 
-        Task: Return a JSON object (NO CODE) to visualize this data.
+        Task: Return a JSON object to visualize this data.
         
-        Rules:
-        1. Choose best 'chart_type': 'bar', 'line', 'pie', 'scatter', 'funnel', 'area'.
-        2. Identify 'x_column' (categories/dates) and 'y_column' (values).
-        3. If multiple series, set 'color_column' or use 'y_column': ['col1', 'col2'].
-        4. Provide a 'title'.
+        CRITICAL RULES:
+        1. YOU MUST OUTPUT ONLY VALID JSON.
+        2. DO NOT OUTPUT SQL. DO NOT WRITE ANY SELECT STATEMENTS.
+        3. Choose best 'chart_type': 'bar', 'line', 'scatter', 'area'. (DO NOT USE PIE. If pie is requested, default to 'bar').
+        4. Identify 'x_column' (categories/dates) and 'y_column' (values).
+        5. If multiple series, set 'color_column' or use 'y_column': ['col1', 'col2'].
+        6. Provide a 'title'.
 
         Response Format (JSON ONLY):
         {{
@@ -171,13 +173,20 @@ class VisualizationAgent:
         try:
             response = await asyncio.to_thread(vn.generate_summary, question=prompt, df=df)
             
+            # Clean Markdown formatting if present
             json_str = response.replace("```json", "").replace("```", "").strip()
+            
+            # Safely extract JSON boundaries
             start = json_str.find("{")
             end = json_str.rfind("}") + 1
-            if start != -1 and end != -1:
-                json_str = json_str[start:end]
             
-            spec = json.loads(json_str)
+            # 🛡️ THE FIX: Ensure we actually found a JSON object before parsing
+            if start != -1 and end != -1 and start < end:
+                json_str = json_str[start:end]
+                spec = json.loads(json_str)
+            else:
+                # If LLM hallucinates SQL or pure text, force the fallback
+                raise ValueError(f"LLM did not return a valid JSON object. Raw output: {response[:50]}...")
             
             fig = VisualizationAgent._build_plotly_figure(df, spec)
             
@@ -192,6 +201,7 @@ class VisualizationAgent:
                 }
 
         except Exception as e:
+            # Silent fallback to Table (no scary console errors)
             print(f"⚠️ Visualization Fallback: {e}")
         
         return {"visual_type": "table", "plotly_code": None, "thought": "Standard data table."}
