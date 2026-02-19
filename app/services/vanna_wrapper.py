@@ -17,8 +17,10 @@ class OneBullexVanna(ChromaDB_VectorStore, OpenAI_Chat):
         # We pass the basic config here...
         OpenAI_Chat.__init__(self, config={
             'api_key': settings.DASHSCOPE_API_KEY,
-            'model': settings.AI_MODEL_NAME,
+            'model': settings.AI_MODEL_NAME
         })
+
+        self.temperature = 0.0
         
         # 3. CRITICAL: FORCE ALIBABA CONNECTION
         # Vanna's init ignores 'base_url' in config, so we manually overwrite the client.
