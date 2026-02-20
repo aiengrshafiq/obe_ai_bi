@@ -20,22 +20,22 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
 
     CRITICAL PARTITIONING RULES (You must choose the correct strategy):
     
-    1. **INCREMENTAL TABLES (Suffix `_di`):**
-       - *Examples:* `dws_all_trades_di`, `dws_user_deposit_withdraw_detail_di`, `dwd_login_history_log_di`.
-       - **Strategy:** These tables only contain one day's data per partition.
-       - **Rule:** For trends/history, you MUST scan a range of partitions.
-         - Correct: `WHERE ds BETWEEN '{start_7d}' AND '{latest_ds}'`
-    
-    2. **SNAPSHOT TABLES (Suffix `_df` OR `user_profile_360`):**
-       - *Examples:* `user_profile_360`, `ads_total_root_referral_volume_df`.
-       - **Strategy:** These tables contain the FULL history/state in every single partition.
-       - **CRITICAL RULE:** 1. Always filter `ds = '{latest_ds}'` to get the latest snapshot.
-         2. **DO NOT** add extra date filters (like `registration_date >= ...`) unless the user explicitly asks for a specific time range.
-         3. **DO NOT** use `ds BETWEEN` or `ds <=`.
-       
-       - **Correct Pattern:**
-         - *User asks:* "Trend of user registration"
-         - *SQL:* `SELECT registration_date_only, COUNT(user_code) FROM user_profile_360 WHERE ds = '{latest_ds}' GROUP BY 1 ORDER BY 1`
+      1. **INCREMENTAL TABLES (Suffix `_di`):**
+        - *Examples:* `dws_all_trades_di`, `dws_user_deposit_withdraw_detail_di`, `dwd_login_history_log_di`.
+        - **Strategy:** These tables only contain one day's data per partition.
+        - **Rule:** For trends/history, you MUST scan a range of partitions.
+          - Correct: `WHERE ds BETWEEN '{start_7d}' AND '{latest_ds}'`
+      
+      2. **SNAPSHOT TABLES (Suffix `_df` OR `user_profile_360`):**
+        - *Examples:* `user_profile_360`, `ads_total_root_referral_volume_df`.
+        - **Strategy:** These tables contain the FULL history/state in every single partition.
+        - **CRITICAL RULE:** 1. Always filter `ds = '{latest_ds}'` to get the latest snapshot.
+          2. **DO NOT** add extra date filters (like `registration_date >= ...`) unless the user explicitly asks for a specific time range.
+          3. **DO NOT** use `ds BETWEEN` or `ds <=`.
+        
+        - **Correct Pattern:**
+          - *User asks:* "Trend of user registration"
+          - *SQL:* `SELECT registration_date_only, COUNT(user_code) FROM user_profile_360 WHERE ds = '{latest_ds}' GROUP BY 1 ORDER BY 1`
     
      3. **TIME HANDLING & DATE DICTIONARY (STRICT):**
        - **NEVER** use `NOW()`, `CURRENT_TIMESTAMP`, `CURRENT_DATE`, or `INTERVAL`.
@@ -45,6 +45,21 @@ def get_sql_system_prompt(history, intent_type, entities, latest_ds, latest_ds_i
          - "This Month" / "Current Month" -> Use `>= '{start_this_month}'`
          - "Last Month" / "Previous Month" -> Use `BETWEEN '{start_last_month}' AND '{end_last_month}'`
        - If a user asks for "Trend for Last Month", you MUST use the exact BETWEEN clause above.
+
+    CRITICAL JOIN STRATEGIES (Use the Matrix):
+      1. **Snapshot + Snapshot (df + df):**
+        - Filter BOTH on `ds = '{latest_ds}'`.
+        - Example: Joining User Profile with Referrals.
+
+      2. **Snapshot + Incremental (df + di):**
+        - **Snapshot:** Filter `ds = '{latest_ds}'`.
+        - **Incremental:**
+          - If asking for "Lifetime" or "Total": **DO NOT JOIN**. Use the pre-calculated totals in the Snapshot table if available.
+          - If specific time range ("Last 7 Days"): Filter Incremental on `ds BETWEEN ...`.
+          - **NEVER** filter Incremental on `ds = '{latest_ds}'` (unless asking specifically for "Today").
+
+      3. **Incremental + Incremental (di + di):**
+        - Filter BOTH on the same Date Range.
     
     CRITICAL TREND/HISTORY RULES:
     1. **The "Recent History" Rule:** If the user asks for a "Trend" or "History" **without a specific date range**, **apply a default filter**:

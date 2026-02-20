@@ -57,10 +57,13 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
    - For "Blacklist", "Banned", or "Risk" queries, you **MUST** use the `risk_campaign_blacklist` table.
 2. **NO TRANSACTIONS:** This table only has *aggregate totals*. For raw deposit/trade lists, use the `dws_` transaction tables.
 
+** ⚡ PERFORMANCE & JOINS (CRITICAL):**
+- **PRE-CALCULATED TOTALS:** This table ALREADY contains lifetime volumes (`total_trade_volume`, `total_deposit_volume`).
+  - **Rule:** If user asks for "Total Volume" or "Lifetime Volume", use `total_trade_volume`. **DO NOT JOIN** the trades table (`dws_all_trades_di`) unless the user explicitly asks for a specific date range (e.g., "Volume last 7 days").
+
 **Critical SQL Rules:**
 1. **The 'Yesterday' Rule (Partitioning):** - You MUST filter by `ds = '{latest_ds}'` for ANY question about "current" status (e.g., "total users", "current balance").
    - Do NOT scan all partitions unless the user explicitly asks for "History" or "Trend".
-
 
 **Column Definitions:**
 - **Volume**: Use `total_trade_volume`.
@@ -142,5 +145,9 @@ EXAMPLES = [
         SELECT '3_Login', COUNT(DISTINCT user_code) FROM public.user_profile_360 WHERE is_active_user_7d = 1 AND ds = '{latest_ds}'
         ORDER BY stage;
         """
+    },
+    {
+        "question": "Sum of trading volume for these users (users invited by 10000047).",
+        "sql": "SELECT SUM(total_trade_volume) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND inviter_user_code = 10000047;"
     }
 ]

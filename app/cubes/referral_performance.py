@@ -58,6 +58,10 @@ Used to track Partner/Affiliate performance. Key distinction:
 - **Community Metrics:** Activity done by the Partner + Their Referrals combined.
 - **Root User:** The partner at the top of the tree.
 
+** ⚡ PERFORMANCE & JOINS (CRITICAL):**
+- **PRE-CALCULATED TOTALS:** This table ALREADY contains aggregated volumes (`total_referral_volume`, `total_community_volume`).
+- **Rule:** Use these columns directly. **DO NOT JOIN** the `dws_all_trades_di` table to calculate volume unless the user asks for a very specific custom time range not covered here.
+
 **Critical Logic:**
 1. **Partition:** Always filter by `ds = '{latest_ds}'` for the latest snapshot.
 2. **Active Ratio:** Calculated as `active_referrals / total_referrals`.
