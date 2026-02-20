@@ -1,6 +1,41 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneBullEx Intelligence</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 
-{% block content %}
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .fade-in-up { animation: fadeInUp 0.3s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+
+        /* Markdown Prose Styling */
+        .prose p { margin-bottom: 0.75em; line-height: 1.6; }
+        .prose ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .prose ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .prose strong { color: #1e293b; font-weight: 600; }
+        .prose code { background-color: #f1f5f9; padding: 2px 4px; rounded: 4px; font-family: monospace; font-size: 0.9em; color: #ef4444; }
+        .prose pre { background-color: #1e293b; color: #e2e8f0; padding: 1rem; rounded-lg; overflow-x: auto; margin-bottom: 1rem; }
+        .prose pre code { background-color: transparent; color: inherit; padding: 0; }
+        
+        /* Switcher Active State */
+        .viz-btn.active { background-color: #eff6ff; color: #2563eb; border-color: #bfdbfe; font-weight: 600; }
+        .viz-btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden bg-gray-50 text-slate-800">
+
     <div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
         <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
         <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
@@ -129,9 +164,7 @@
     </main>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
-{% endblock %}
 
-{% block scripts %}
     <script>
         // --- SECURITY HELPER: Prevent XSS ---
         function escapeHtml(unsafe) {
@@ -158,7 +191,6 @@
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('sidebar-overlay');
-            const sidebarOverlay = document.getElementById('sidebar-overlay');
             sidebar.classList.toggle('-translate-x-full');
             overlay.classList.toggle('hidden');
         }
@@ -603,4 +635,5 @@
             }
         }
     </script>
-{% endblock %}
+</body>
+</html>
