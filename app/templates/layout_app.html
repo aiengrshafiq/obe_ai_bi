@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
+    <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
+    <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+</div>
+
+<div class="flex h-screen overflow-hidden">
+    
+    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-2xl h-full pt-14 md:pt-0 border-r border-slate-800">
+        <div class="p-6 border-b border-slate-800 hidden md:block">
+            <h1 class="text-xl font-bold tracking-tight text-blue-400 flex items-center gap-2">
+                <span class="text-2xl">🐂</span> OneBullEx
+            </h1>
+            <p class="text-[11px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Enterprise BI Copilot</p>
+        </div>
+        
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar">
+            <a href="/" class="w-full flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-3 rounded-lg transition-all shadow-lg group border border-blue-500 mb-6">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                <span class="font-medium text-sm">Chat Intelligence</span>
+            </a>
+
+            <div class="pt-2 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Admin Controls</div>
+            
+            <a href="/admin/qa" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors group {% if request.url.path == '/admin/qa' %}bg-slate-800 text-white{% endif %}">
+                <div class="w-5 h-5 flex items-center justify-center rounded bg-slate-800 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <span class="text-xs">⚖️</span>
+                </div>
+                <span class="text-sm font-medium">AI Tribunal (QA)</span>
+            </a>
+            
+            <a href="/admin/logs" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                <span class="text-sm">System Logs</span>
+            </a>
+        </nav>
+
+        <div class="p-4 border-t border-slate-800 bg-slate-900 mt-auto">
+            <div class="flex items-center gap-3 mb-4 px-2">
+                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-lg ring-2 ring-slate-800" id="user-avatar">U</div>
+                <div class="flex flex-col overflow-hidden">
+                    <div class="text-sm font-semibold text-white truncate" id="username-display">User</div>
+                    <div class="text-[10px] text-slate-400 truncate">Analyst Access</div>
+                </div>
+            </div>
+            <button onclick="logout()" class="w-full text-xs font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-slate-700">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                Sign Out
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full bg-slate-50 relative w-full pt-14 md:pt-0 overflow-hidden">
+        {% block page_content %}{% endblock %}
+    </main>
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Global User & Sidebar Logic
+    const token = localStorage.getItem('access_token');
+    const username = localStorage.getItem('username');
+
+    if (!token && window.location.pathname !== '/login') window.location.href = "/login";
+    if (username) {
+        const nameEl = document.getElementById('username-display');
+        const avEl = document.getElementById('user-avatar');
+        if(nameEl) nameEl.textContent = username;
+        if(avEl) avEl.textContent = username.substring(0,2).toUpperCase();
+    }
+
+    function logout() { localStorage.clear(); window.location.href = "/login"; }
+    
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('sidebar-overlay');
+        sidebar.classList.toggle('-translate-x-full');
+        overlay.classList.toggle('hidden');
+    }
+</script>
+{% block page_scripts %}{% endblock %}
+{% endblock %}

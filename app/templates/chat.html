@@ -1,140 +1,50 @@
-{% extends "base.html" %}
+{% extends "layout_app.html" %}
 
 {% block content %}
-    <div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
-        <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
-        <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-        </button>
+<header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
+        <div class="flex items-center gap-3">
+            <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Intelligence Engine</h2>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 tracking-wide uppercase">Production</span>
+        </div>
+        <div class="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            Data Warehouse Live
+        </div>
+    </header>
+
+    <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth bg-[#f8fafc]">
+        <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up pt-4">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
+            <div class="bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
+                <h3 class="font-semibold text-gray-900 mb-2 text-lg">Ready to analyze.</h3>
+                <p class="text-gray-600 text-sm leading-relaxed mb-5">
+                    I have secure, read-only access to <strong>User Profiles, Trading Activity, Financial Audits, and Risk Logs</strong>.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button onclick="fillInput('Show total trading volume by day for last week')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium">📈 Show daily volume trend</button>
+                    <button onclick="fillInput('List users with high risk score > 0.8')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium">🚨 Find high-risk users</button>
+                </div>
+            </div>
+        </div>
+        <div id="scroll-anchor" class="h-1"></div>
     </div>
 
-    <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-2xl h-full pt-14 md:pt-0 border-r border-slate-800">
-        <div class="p-6 border-b border-slate-800 hidden md:block">
-            <h1 class="text-xl font-bold tracking-tight text-blue-400 flex items-center gap-2">
-                <span class="text-2xl">🐂</span> OneBullEx
-            </h1>
-            <p class="text-[11px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Enterprise BI Copilot</p>
-        </div>
-        
-        <nav class="flex-1 p-4 space-y-2 overflow-y-auto no-scrollbar">
-            <button onclick="location.reload()" class="w-full flex items-center space-x-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white p-3 rounded-lg transition-all shadow-lg group border border-blue-500 mb-6">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                <span class="font-medium text-sm">New Analysis</span>
-            </button>
-
-            <div class="pt-2 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Quick Queries</div>
-            
-            <button onclick="fillInput('Show top 10 large deposits')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
-                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">💰</span>
-                <span class="text-sm font-medium">Large Deposits</span>
-            </button>
-            <button onclick="fillInput('User registration trend last 7 days')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
-                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">📈</span>
-                <span class="text-sm font-medium">User Growth</span>
-            </button>
-            <button onclick="fillInput('Show fraud risk summary')" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
-                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">🛡️</span>
-                <span class="text-sm font-medium">Risk Analysis</span>
-            </button>
-
-            <div class="pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Tools</div>
-            <a href="/admin/logs" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
-                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
-                <span class="text-sm">System Logs</span>
-            </a>
-            <a href="/admin/knowledge_base" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
-                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                <span class="text-sm">Knowledge Base</span>
-            </a>
-            <a href="/admin/qa" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors group">
-                <div class="w-5 h-5 flex items-center justify-center rounded bg-slate-800 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                    <span class="text-xs">⚖️</span>
-                </div>
-                <span class="text-sm font-medium">AI Tribunal</span>
-            </a>
-        </nav>
-
-        <div class="p-4 border-t border-slate-800 bg-slate-900 mt-auto">
-            <div class="flex items-center gap-3 mb-4 px-2">
-                <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white text-sm font-bold shadow-lg ring-2 ring-slate-800" id="user-avatar">U</div>
-                <div class="flex flex-col overflow-hidden">
-                    <div class="text-sm font-semibold text-white truncate" id="username-display">User</div>
-                    <div class="text-[10px] text-slate-400 truncate">Analyst Access</div>
-                </div>
-            </div>
-            <button onclick="logout()" class="w-full text-xs font-medium text-red-400 hover:text-red-300 hover:bg-slate-800 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors border border-transparent hover:border-slate-700">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                Sign Out
-            </button>
-        </div>
-    </aside>
-
-    <main class="flex-1 flex flex-col h-full bg-white relative w-full pt-14 md:pt-0">
-        
-        <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
-            <div class="flex items-center gap-3">
-                <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Intelligence Engine</h2>
-                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 tracking-wide uppercase">Production</span>
-            </div>
-            <div class="flex items-center gap-2 text-xs font-medium text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
-                <span class="relative flex h-2 w-2">
-                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                Data Warehouse Live
-            </div>
-        </header>
-
-        <div id="chat-container" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth bg-[#f8fafc]">
-            <div class="flex space-x-4 max-w-4xl mx-auto fade-in-up pt-4">
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
-                <div class="bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none shadow-sm w-full">
-                    <h3 class="font-semibold text-gray-900 mb-2 text-lg">Ready to analyze.</h3>
-                    <p class="text-gray-600 text-sm leading-relaxed mb-5">
-                        I have secure, read-only access to <strong>User Profiles, Trading Activity, Financial Audits, and Risk Logs</strong>.
-                        <br>How can I help you today?
-                    </p>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <button onclick="fillInput('Show total trading volume by day for last week')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium group">
-                            <span class="mr-2 group-hover:scale-110 inline-block transition-transform">📈</span> Show daily volume trend
-                        </button>
-                        <button onclick="fillInput('List users with high risk score > 0.8')" class="text-left text-sm p-3.5 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all text-gray-600 hover:text-blue-700 font-medium group">
-                            <span class="mr-2 group-hover:scale-110 inline-block transition-transform">🚨</span> Find high-risk users
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <div id="scroll-anchor" class="h-1"></div>
-        </div>
-
-        <div class="flex-none w-full bg-white border-t border-gray-200 p-4 md:p-6 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
-            <div class="max-w-4xl mx-auto relative group">
-                <div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl opacity-0 group-focus-within:opacity-20 transition-opacity duration-300 -m-[2px]"></div>
-                <div class="relative flex items-end bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:shadow-md focus-within:border-blue-500 transition-all overflow-hidden">
-                    
-                    <textarea id="user-input" 
-                        class="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base px-5 py-4 focus:outline-none resize-none max-h-48" 
-                        placeholder="Ask a question about your data..."
-                        rows="1"
-                        oninput="autoResize(this)"
-                        onkeydown="handleKeyPress(event)"></textarea>
-                    
-                    <div class="pb-2 pr-2">
-                        <button onclick="sendMessage()" class="p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all hover:scale-105 shadow-md disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed" id="send-btn">
-                            <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="text-center mt-2 flex justify-center items-center gap-2">
-                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <p class="text-[11px] text-gray-400 font-medium">AI generated content. Verify critical financial data.</p>
+    <div class="flex-none w-full bg-white border-t border-gray-200 p-4 md:p-6 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.02)]">
+        <div class="max-w-4xl mx-auto relative group">
+            <div class="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl opacity-0 group-focus-within:opacity-20 transition-opacity duration-300 -m-[2px]"></div>
+            <div class="relative flex items-end bg-white border border-gray-300 rounded-2xl shadow-sm focus-within:shadow-md focus-within:border-blue-500 transition-all overflow-hidden">
+                <textarea id="user-input" class="w-full bg-transparent text-gray-800 placeholder-gray-400 text-base px-5 py-4 focus:outline-none resize-none max-h-48" placeholder="Ask a question..." rows="1" oninput="autoResize(this)" onkeydown="handleKeyPress(event)"></textarea>
+                <div class="pb-2 pr-2">
+                    <button onclick="sendMessage()" class="p-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all hover:scale-105 shadow-md disabled:opacity-50" id="send-btn">
+                        <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                    </button>
                 </div>
             </div>
         </div>
-    </main>
-
-    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
+    </div>
 {% endblock %}
 
 {% block scripts %}
