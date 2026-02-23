@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
-    <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
-    <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
-</div>
+{% block layout %}
+    <div class="md:hidden fixed top-0 w-full bg-slate-900 text-white z-50 flex items-center justify-between px-4 py-3 shadow-md h-14">
+        <span class="font-bold text-lg text-blue-400 tracking-tight">OneBullEx</span>
+        <button onclick="toggleSidebar()" class="text-gray-300 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+    </div>
 
-<div class="flex h-screen overflow-hidden">
-    
     <aside id="sidebar" class="fixed inset-y-0 left-0 w-64 bg-slate-900 text-white transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 z-40 flex flex-col shadow-2xl h-full pt-14 md:pt-0 border-r border-slate-800">
         <div class="p-6 border-b border-slate-800 hidden md:block">
             <h1 class="text-xl font-bold tracking-tight text-blue-400 flex items-center gap-2">
@@ -24,18 +22,32 @@
                 <span class="font-medium text-sm">Chat Intelligence</span>
             </a>
 
-            <div class="pt-2 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Admin Controls</div>
+            <div class="pt-2 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Quick Queries</div>
+            <button onclick="if(window.fillInput) fillInput('Show top 10 large deposits'); else window.location.href='/?q=large_deposits'" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
+                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">💰</span>
+                <span class="text-sm font-medium">Large Deposits</span>
+            </button>
+            <button onclick="if(window.fillInput) fillInput('User registration trend last 7 days'); else window.location.href='/?q=user_growth'" class="w-full text-left flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-300 hover:text-white group">
+                <span class="text-lg grayscale group-hover:grayscale-0 transition-all">📈</span>
+                <span class="text-sm font-medium">User Growth</span>
+            </button>
+
+            <div class="pt-6 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider px-2">Tools</div>
             
-            <a href="/admin/qa" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors group {% if request.url.path == '/admin/qa' %}bg-slate-800 text-white{% endif %}">
+            <a href="/admin/qa" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors group">
                 <div class="w-5 h-5 flex items-center justify-center rounded bg-slate-800 text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <span class="text-xs">⚖️</span>
                 </div>
                 <span class="text-sm font-medium">AI Tribunal (QA)</span>
             </a>
-            
+
             <a href="/admin/logs" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
                 <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                 <span class="text-sm">System Logs</span>
+            </a>
+            <a href="/admin/knowledge_base" class="flex items-center space-x-3 p-2.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                <span class="text-sm">Knowledge Base</span>
             </a>
         </nav>
 
@@ -54,36 +66,32 @@
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-full bg-slate-50 relative w-full pt-14 md:pt-0 overflow-hidden">
+    <main class="flex-1 flex flex-col h-full bg-white relative w-full pt-14 md:pt-0">
         {% block page_content %}{% endblock %}
     </main>
 
     <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 hidden z-30 md:hidden backdrop-blur-sm transition-opacity"></div>
-</div>
-{% endblock %}
 
-{% block scripts %}
-<script>
-    // Global User & Sidebar Logic
-    const token = localStorage.getItem('access_token');
-    const username = localStorage.getItem('username');
+    <script>
+        const token = localStorage.getItem('access_token');
+        const username = localStorage.getItem('username');
 
-    if (!token && window.location.pathname !== '/login') window.location.href = "/login";
-    if (username) {
-        const nameEl = document.getElementById('username-display');
-        const avEl = document.getElementById('user-avatar');
-        if(nameEl) nameEl.textContent = username;
-        if(avEl) avEl.textContent = username.substring(0,2).toUpperCase();
-    }
+        if (!token && window.location.pathname !== '/login') window.location.href = "/login";
+        if (username) {
+            const nameEl = document.getElementById('username-display');
+            const avEl = document.getElementById('user-avatar');
+            if(nameEl) nameEl.textContent = username;
+            if(avEl) avEl.textContent = username.substring(0,2).toUpperCase();
+        }
 
-    function logout() { localStorage.clear(); window.location.href = "/login"; }
-    
-    function toggleSidebar() {
-        const sidebar = document.getElementById('sidebar');
-        const overlay = document.getElementById('sidebar-overlay');
-        sidebar.classList.toggle('-translate-x-full');
-        overlay.classList.toggle('hidden');
-    }
-</script>
-{% block page_scripts %}{% endblock %}
+        function logout() { localStorage.clear(); window.location.href = "/login"; }
+        
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+    </script>
+    {% block scripts %}{% endblock %}
 {% endblock %}

@@ -7,6 +7,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
@@ -35,8 +36,6 @@
     {% block head %}{% endblock %}
 </head>
 <body class="h-screen flex overflow-hidden bg-gray-50 text-slate-800">
-    {% block content %}{% endblock %}
-
-    {% block scripts %}{% endblock %}
+    {% block layout %}{% endblock %}
 </body>
 </html>

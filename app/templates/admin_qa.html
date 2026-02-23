@@ -1,51 +1,67 @@
 {% extends "layout_app.html" %}
 
 {% block page_content %}
-<div class="flex-1 flex flex-col overflow-y-auto bg-slate-50">
-    <header class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm">
+    <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
         <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center text-white font-bold shadow-md">
-                ⚖️
-            </div>
-            <h1 class="text-xl font-bold text-slate-800 tracking-tight">AI Tribunal</h1>
-            <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-bold tracking-wide uppercase">Admin Area</span>
+            <h2 class="text-lg font-semibold text-slate-800 tracking-tight">AI Tribunal</h2>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 tracking-wide uppercase">Admin Area</span>
         </div>
+        <a href="/" class="text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">← Back to Chat</a>
     </header>
 
-    <div class="max-w-7xl mx-auto w-full p-8">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 relative overflow-hidden mb-8">
-            <h2 class="text-lg font-bold text-slate-800 mb-1 relative z-10">Execute Adversarial Evaluation</h2>
-            <p class="text-slate-500 text-sm mb-6 max-w-lg relative z-10">
-                The "Red Team" AI will generate tricky SQL questions and the "Judge" AI will grade responses against safety rules.
-            </p>
-
-            <div class="flex items-center gap-4 relative z-10">
-                <select id="test-count" class="appearance-none bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-48 p-2.5 pr-8 cursor-pointer font-medium">
-                    <option value="5">⚡ 5 Tests (Smoke)</option>
-                    <option value="20" selected>🧪 20 Tests (Standard)</option>
-                </select>
-                <button onclick="runTests()" id="run-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-lg shadow-indigo-200">
-                    <span id="btn-icon">▶️</span> <span>Run Tribunal</span>
-                </button>
+    <div class="flex-1 overflow-y-auto p-4 md:p-8 bg-[#f8fafc]">
+        
+        <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 relative overflow-hidden">
+            <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-lg">Adversarial Evaluation</h3>
+                    <p class="text-sm text-slate-500">Run the "Red Team" agent to test the system against 100+ logical traps.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <select id="test-count" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium">
+                        <option value="5">⚡ 5 Tests (Smoke)</option>
+                        <option value="20" selected>🧪 20 Tests (Standard)</option>
+                        <option value="50">🔥 50 Tests (Deep)</option>
+                    </select>
+                    <button onclick="runTests()" id="run-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span>▶️ Run Tribunal</span>
+                    </button>
+                </div>
             </div>
             
-            <div id="progress-container" class="hidden mt-8">
-                <div class="flex justify-between text-xs font-bold text-indigo-600 mb-2 uppercase tracking-wider">
+            <div id="progress-container" class="hidden mt-6">
+                <div class="flex justify-between text-xs font-bold text-indigo-600 mb-1 uppercase tracking-wider">
                     <span class="animate-pulse">Running Simulation...</span>
                     <span id="progress-text">0%</span>
                 </div>
-                <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                    <div id="progress-bar" class="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-300 relative" style="width: 0%"></div>
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 relative" style="width: 0%"></div>
                 </div>
             </div>
         </div>
 
-        <div id="report-container" class="hidden opacity-0 transform translate-y-4 transition-all duration-500">
+        <div id="report-container" class="hidden fade-in-up max-w-6xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
+                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</div>
+                    <div class="text-4xl font-black text-slate-800 mt-2" id="score-accuracy">--%</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
+                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Passed</div>
+                    <div class="text-4xl font-black text-emerald-500 mt-2" id="score-passed">--</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
+                    <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Failed</div>
+                    <div class="text-4xl font-black text-red-500 mt-2" id="score-failed">--</div>
+                </div>
+            </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-bold tracking-wider">
                         <tr>
                             <th class="px-6 py-4 border-b border-gray-200">Verdict</th>
+                            <th class="px-6 py-4 border-b border-gray-200">Category</th>
                             <th class="px-6 py-4 border-b border-gray-200 w-1/3">Scenario</th>
                             <th class="px-6 py-4 border-b border-gray-200">Reasoning</th>
                         </tr>
@@ -55,10 +71,9 @@
             </div>
         </div>
     </div>
-</div>
 {% endblock %}
 
-{% block page_scripts %}
+{% block scripts %}
 <script>
     async function runTests() {
         const btn = document.getElementById('run-btn');
@@ -68,65 +83,79 @@
         const container = document.getElementById('report-container');
         
         btn.disabled = true;
-        btn.classList.add('opacity-75');
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
         progress.classList.remove('hidden');
         container.classList.add('hidden');
         
-        // Sim Progress
         let w = 0;
-        const interval = setInterval(() => { if(w < 90) { w += 2; bar.style.width = w + "%"; } }, 500);
+        const interval = setInterval(() => { if(w < 95) { w += 2; bar.style.width = w + "%"; } }, 500);
 
         try {
-            // FIXED: Send Auth Token in Header to prevent Redirect (302) error
             const res = await fetch('/api/admin/qa/run', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + localStorage.getItem('access_token') // <--- CRITICAL FIX
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('access_token') },
                 body: JSON.stringify({ count: parseInt(count) })
             });
             
-            // Catch Non-JSON errors (HTML 500/404/302)
-            const text = await res.text();
+            // Safe JSON Parse
+            const rawText = await res.text();
             let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                throw new Error("Server Error (Non-JSON): " + text.substring(0, 100) + "...");
-            }
+            try { data = JSON.parse(rawText); } 
+            catch(e) { throw new Error("Server Error: " + rawText.substring(0, 100)); }
 
-            if (!res.ok) throw new Error(data.detail || "API Error");
+            if (!res.ok) throw new Error(data.detail || "Error running tests");
 
             clearInterval(interval);
             bar.style.width = "100%";
-            renderReport(data);
+            document.getElementById('progress-text').innerText = "100%";
+            
+            setTimeout(() => {
+                renderReport(data);
+                progress.classList.add('hidden');
+                bar.style.width = "0%";
+            }, 500);
             
         } catch (e) {
             alert("Test Failed: " + e.message);
+            clearInterval(interval);
         } finally {
             btn.disabled = false;
-            btn.classList.remove('opacity-75');
-            clearInterval(interval);
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     }
 
     function renderReport(data) {
-        document.getElementById('report-container').classList.remove('hidden', 'opacity-0');
+        document.getElementById('report-container').classList.remove('hidden', 'fade-in-up');
+        void document.getElementById('report-container').offsetWidth; // Trigger reflow
+        document.getElementById('report-container').classList.add('fade-in-up');
+
+        const acc = Math.round((data.passed / data.total) * 100);
+        document.getElementById('score-accuracy').innerText = isNaN(acc) ? "0%" : acc + "%";
+        document.getElementById('score-accuracy').className = `text-4xl font-black mt-2 ${acc >= 90 ? 'text-emerald-500' : 'text-red-500'}`;
+        
+        document.getElementById('score-passed').innerText = data.passed;
+        document.getElementById('score-failed').innerText = data.failed;
+
         const tbody = document.getElementById('results-table');
         tbody.innerHTML = '';
         
         data.details.forEach(row => {
             const isPass = row.score === 5;
             const badge = isPass 
-                ? '<span class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold">PASS</span>'
-                : '<span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">FAIL</span>';
+                ? '<span class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-200">PASS</span>'
+                : '<span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-bold border border-red-200">FAIL</span>';
             
             const tr = document.createElement('tr');
+            tr.className = isPass ? "bg-white hover:bg-slate-50 transition-colors" : "bg-red-50/20 hover:bg-red-50/40 transition-colors";
+            
             tr.innerHTML = `
                 <td class="px-6 py-4 align-top">${badge}</td>
-                <td class="px-6 py-4 align-top font-medium text-slate-800">${row.question}</td>
-                <td class="px-6 py-4 align-top text-slate-600">${row.failure_reason}</td>
+                <td class="px-6 py-4 align-top"><span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">${row.category || 'General'}</span></td>
+                <td class="px-6 py-4 align-top">
+                    <div class="font-medium text-slate-800 text-sm leading-relaxed">"${row.question}"</div>
+                    <div class="mt-2 text-[10px] font-mono text-slate-400 truncate max-w-xs">${row.sql}</div>
+                </td>
+                <td class="px-6 py-4 align-top text-slate-600 font-medium text-sm">${row.failure_reason}</td>
             `;
             tbody.appendChild(tr);
         });

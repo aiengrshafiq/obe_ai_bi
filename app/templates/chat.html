@@ -1,7 +1,7 @@
 {% extends "layout_app.html" %}
 
-{% block content %}
-<header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
+{% block page_content %}
+    <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
         <div class="flex items-center gap-3">
             <h2 class="text-lg font-semibold text-slate-800 tracking-tight">Intelligence Engine</h2>
             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 tracking-wide uppercase">Production</span>
@@ -48,475 +48,295 @@
 {% endblock %}
 
 {% block scripts %}
-    <script>
-        // --- SECURITY HELPER: Prevent XSS ---
-        function escapeHtml(unsafe) {
-            if (unsafe === null || unsafe === undefined) return "";
-            return String(unsafe)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
+<script>
+    // --- CHAT SPECIFIC LOGIC (Preserved from Backup) ---
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return "";
+        return String(unsafe).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    
+    function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+    
+    let chatHistory = [];
+    window.queryResults = {};
+    window.resultRegistry = {}; 
 
-        const token = localStorage.getItem('access_token');
-        const username = localStorage.getItem('username');
+    function fillInput(text) {
+        const input = document.getElementById('user-input');
+        input.value = text;
+        autoResize(input);
+        input.focus();
+    }
 
-        if (!token) window.location.href = "/login";
-        if (username) {
-            document.getElementById('username-display').textContent = username; // Safer than innerText
-            document.getElementById('user-avatar').textContent = username.substring(0,2).toUpperCase();
-        }
+    function handleKeyPress(e) { 
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    }
 
-        function logout() { localStorage.clear(); window.location.href = "/login"; }
-        
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('sidebar-overlay');
-            const sidebarOverlay = document.getElementById('sidebar-overlay');
-            sidebar.classList.toggle('-translate-x-full');
-            overlay.classList.toggle('hidden');
-        }
+    function scrollToBottom() {
+        const anchor = document.getElementById('scroll-anchor');
+        setTimeout(() => anchor.scrollIntoView({ behavior: 'smooth', block: 'end' }), 100);
+    }
 
-        function autoResize(el) {
-            el.style.height = 'auto';
-            el.style.height = el.scrollHeight + 'px';
-        }
+    async function sendMessage() {
+        const input = document.getElementById('user-input');
+        const btn = document.getElementById('send-btn');
+        const text = input.value.trim();
+        if (!text) return;
 
-        let chatHistory = [];
-        window.queryResults = {};
-        window.resultRegistry = {}; 
+        input.value = ''; input.style.height = 'auto'; input.disabled = true; btn.disabled = true;
+        appendUserMessage(text);
+        const loadingId = appendLoader();
 
-        function fillInput(text) {
-            const input = document.getElementById('user-input');
-            input.value = text;
-            autoResize(input);
-            input.focus();
-        }
-
-        function handleKeyPress(e) { 
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        }
-
-        function scrollToBottom() {
-            const anchor = document.getElementById('scroll-anchor');
-            setTimeout(() => {
-                anchor.scrollIntoView({ behavior: 'smooth', block: 'end' });
-            }, 100);
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('user-input');
-            const btn = document.getElementById('send-btn');
-            const text = input.value.trim();
-            if (!text) return;
-
-            input.value = '';
-            input.style.height = 'auto'; 
-            input.disabled = true;
-            btn.disabled = true;
-            
-            appendUserMessage(text);
-            const loadingId = appendLoader();
-
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ message: text, history: chatHistory })
-                });
-
-                if (res.status === 401) { logout(); return; }
-
-                const data = await res.json();
-                document.getElementById(loadingId).remove();
-
-                chatHistory.push({ role: "user", content: text });
-                if (data.sql) chatHistory.push({ role: "assistant", content: data.sql });
-                else if (data.message) chatHistory.push({ role: "assistant", content: data.message });
-                if (chatHistory.length > 8) chatHistory = chatHistory.slice(-8);
-
-                renderResponse(data);
-
-            } catch (err) {
-                if(document.getElementById(loadingId)) document.getElementById(loadingId).remove();
-                appendSystemMessage("Network Error: " + err.message, "text-red-500");
-            } finally {
-                input.disabled = false;
-                btn.disabled = false;
-                input.focus();
-            }
-        }
-
-        function appendUserMessage(text) {
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
-            // Sanitize user input before display
-            const safeText = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
-            div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${safeText}</div>`;
-            container.insertBefore(div, document.getElementById('scroll-anchor'));
-            scrollToBottom();
-        }
-
-        function appendLoader() {
-            const id = 'loader-' + Date.now();
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.id = id;
-            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
-            div.innerHTML = `
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
-                <div class="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
-                    <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
-                    <span class="text-xs text-gray-500 font-medium">Analyzing data...</span>
-                </div>`;
-            container.insertBefore(div, document.getElementById('scroll-anchor'));
-            scrollToBottom();
-            return id;
-        }
-
-        function appendSystemMessage(text, colorClass = "text-gray-800") {
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
-            // Escape system message content
-            div.innerHTML = `
-                <div class="w-10 h-10 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md">!</div>
-                <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${escapeHtml(text)}</div>`;
-            container.insertBefore(div, document.getElementById('scroll-anchor'));
-            scrollToBottom();
-        }
-
-        function renderResponse(data) {
-            // Memory Cap: Keep only last 20 results in registry
-            const registryKeys = Object.keys(window.resultRegistry);
-            if (registryKeys.length > 20) {
-                delete window.resultRegistry[registryKeys[0]];
-                delete window.queryResults[registryKeys[0]];
-            }
-
-            const container = document.getElementById('chat-container');
-            const div = document.createElement('div');
-            div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-8";
-            
-            let content = '';
-            
-            if (data.type === 'error') {
-                content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    ${escapeHtml(data.message)}
-                </div>`;
-            } else if (data.type === 'text') {
-                const rawHtml = marked.parse(data.message);
-                const safeHtml = DOMPurify.sanitize(rawHtml);
-                content = `<div class="text-slate-700 text-sm leading-relaxed prose">${safeHtml}</div>`;
-            } else {
-                const resultId = Date.now();
-                if(data.data) window.queryResults[resultId] = data.data;
-                window.resultRegistry[resultId] = data; 
-
-                
-
-                if (data.thought) {
-                    content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none">
-                        <span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${escapeHtml(data.thought)}</span>
-                    </div>`;
-                }
-
-                // SQL Block (Safe Escaping)
-                content += `
-                    <details class="group mb-4">
-                        <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none transition-colors">
-                            <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-                            View SQL Query
-                        </summary>
-                        <div class="mt-2 relative">
-                            <div class="absolute top-0 left-0 w-full h-8 bg-slate-800 rounded-t-lg flex items-center px-3 gap-1.5">
-                                <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                                <div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                                <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                            </div>
-                            <textarea class="w-full bg-slate-900 text-blue-300 font-mono text-xs p-4 pt-10 rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700 leading-relaxed" spellcheck="false" id="sql-${resultId}">${escapeHtml(data.sql)}</textarea>
-                            <div class="absolute top-2 right-2 flex gap-2">
-                                <button onclick="copyToClipboard('sql-${resultId}')" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 transition-colors" title="Copy SQL">📋</button>
-                                <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-3 py-1 rounded shadow transition-colors font-medium">Run Edit</button>
-                            </div>
-                        </div>
-                    </details>`;
-                
-
-            // --- 1. RENDER CHIPS (NEW) ---
-            
-            if (data.suggestions && data.suggestions.length > 0) {
-                    content += `<div class="flex flex-wrap gap-2 mb-3 fade-in-up" style="animation-delay: 0.1s">`;
-                    data.suggestions.forEach(chip => {
-                        // Securely encode the prompt string
-                        const safePrompt = escapeHtml(chip.prompt); 
-                        const safeLabel = escapeHtml(chip.label);
-                        
-                        content += `
-                            <button onclick="fillInput('${safePrompt}'); sendMessage()" 
-                                class="text-[11px] font-medium text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm">
-                                <span class="text-blue-400 font-bold">+</span> ${safeLabel}
-                            </button>`;
-                    });
-                    content += `</div>`;
-                }
-            // -----------------------------
-
-
-                // Visualization
-                const chartId = 'viz-' + resultId;
-                const containerId = 'viz-container-' + resultId;
-                
-                if (data.visual_type === 'plotly' && data.plotly_code) {
-                    const currentType = data.plotly_code.data[0].type;
-                    
-                    content += `
-                    <div class="flex gap-1.5 mb-2 overflow-x-auto no-scrollbar pb-1" id="toolbar-${resultId}">
-                        <button onclick="switchVisual(${resultId}, 'bar')" data-type="bar" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'bar' ? 'active' : ''}">📊 Bar</button>
-                        <button onclick="switchVisual(${resultId}, 'line')" data-type="line" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'scatter' ? 'active' : ''}">📈 Line</button>
-                        <button onclick="switchVisual(${resultId}, 'area')" data-type="area" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">📉 Area</button>
-                        <button onclick="switchVisual(${resultId}, 'pie')" data-type="pie" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🥧 Pie</button>
-                        <button onclick="switchVisual(${resultId}, 'table')" data-type="table" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🔢 Table</button>
-                    </div>`;
-                    
-                    content += `
-                        <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm mb-4">
-                            <div id="${containerId}" class="w-full">
-                                <div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>
-                            </div>
-                        </div>`;
-
-                    setTimeout(() => {
-                        Plotly.purge(chartId);
-                        Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false});
-                    }, 50);
-
-                } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
-                    content += `<div id="${containerId}">${generateTable(data.data)}</div>`;
-                } else {
-                    content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
-                }
-
-                if (data.data && data.data.length > 0) {
-                    content += `
-                        <div class="mt-3 flex gap-2 justify-end">
-                            <button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                Download CSV
-                            </button>
-                        </div>`;
-                }
-            }
-
-            div.innerHTML = `
-                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white mt-1">AI</div>
-                <div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content}</div>`;
-            
-            container.insertBefore(div, document.getElementById('scroll-anchor'));
-            scrollToBottom();
-        }
-
-        // --- SMART VISUAL SWITCHER ---
-        function switchVisual(id, type) {
-            const entry = window.resultRegistry[id];
-            const containerId = 'viz-container-' + id;
-            const container = document.getElementById(containerId);
-            const toolbarId = 'toolbar-' + id;
-            
-            if (!entry || !container) return;
-
-            // Highlight Logic
-            const toolbar = document.getElementById(toolbarId);
-            if (toolbar) {
-                const buttons = toolbar.querySelectorAll('button');
-                buttons.forEach(btn => {
-                    if (btn.getAttribute('data-type') === type) {
-                        btn.classList.add('active');
-                    } else {
-                        btn.classList.remove('active');
-                    }
-                });
-            }
-
-            if (type === 'table') {
-                container.innerHTML = generateTable(entry.data);
-                return;
-            }
-
-            const chartId = 'viz-' + id;
-            container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>`;
-            
-            let layout = JSON.parse(JSON.stringify(entry.plotly_code.layout));
-            let data = JSON.parse(JSON.stringify(entry.plotly_code.data));
-
-            // --- DATA SAFETY CHECKS ---
-            const firstTrace = data[0];
-            const isNumericY = firstTrace.y.every(val => !isNaN(parseFloat(val)));
-
-            if (type === 'pie') {
-                if (entry.data.length > 20) {
-                    alert("Dataset too large for Pie chart (Limit: 20 rows).");
-                    return;
-                }
-                if (!isNumericY) {
-                    alert("Pie charts require numeric values.");
-                    return;
-                }
-                firstTrace.type = 'pie';
-                firstTrace.labels = firstTrace.x;
-                firstTrace.values = firstTrace.y;
-                firstTrace.x = null; firstTrace.y = null;
-                firstTrace.textinfo = "label+percent";
-                firstTrace.hovertemplate = null;
-                layout.xaxis = { visible: false };
-                layout.yaxis = { visible: false };
-                data = [firstTrace];
-            } else {
-                if ((type === 'line' || type === 'area') && !isNumericY) {
-                    alert("Line/Area charts require numeric values on Y-axis.");
-                    return; 
-                }
-                
-                data.forEach(trace => {
-                    if (type === 'bar') {
-                        trace.type = 'bar';
-                        trace.mode = undefined; trace.fill = undefined;
-                    } else if (type === 'line') {
-                        trace.type = 'scatter';
-                        trace.mode = 'lines+markers';
-                        trace.fill = 'none';
-                        trace.line = { shape: 'spline', width: 3 }; 
-                    } else if (type === 'area') {
-                        trace.type = 'scatter';
-                        trace.mode = 'lines';
-                        trace.fill = 'tozeroy';
-                        trace.line = { shape: 'spline' };
-                    }
-                });
-            }
-
-            try {
-                Plotly.purge(chartId); // Prevent Memory Leak
-                Plotly.newPlot(chartId, data, layout, {responsive: true, displayModeBar: false});
-            } catch(e) {
-                console.error("Switch failed", e);
-            }
-        }
-
-        function formatNumber(num) {
-            return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num);
-        }
-
-       function generateTable(data) {
-            if (!data || data.length === 0) return '';
-            
-            // 1. ARCHITECTURAL FIX: 
-            // Create a shallow copy [...data] to avoid mutating the original array (which might be used by charts).
-            // Reverse it to show LATEST records first.
-            const displayData = [...data].reverse().slice(0, 10); 
-            
-            const headers = Object.keys(data[0]);
-            let rows = '';
-            
-            displayData.forEach((row, idx) => {
-                const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-                
-                const cells = Object.values(row).map((v, colIndex) => {
-                    let displayVal = v;
-                    const colName = headers[colIndex].toLowerCase(); 
-                    
-                    const isIdCol = colName.includes('code') || colName.includes('id') || colName.endsWith('_id');
-                    
-                    if (typeof v === 'number' && !isIdCol) {
-                        displayVal = formatNumber(v);
-                    }
-                    
-                    return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${escapeHtml(displayVal)}</td>`;
-                }).join('');
-
-                rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">${cells}</tr>`;
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('access_token') },
+                body: JSON.stringify({ message: text, history: chatHistory })
             });
-            
-            // 2. UX UPDATE: Change the footer text to be explicit about what is being shown.
-            const footerText = data.length > 10 
-                ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">
-                    Showing latest 10 of ${data.length} rows. <span class="font-semibold text-slate-500 cursor-pointer hover:text-blue-600" onclick="exportCSV(${Date.now()})">Download CSV</span> for full history.
-                </div>` 
-                : '';
 
-            return `
-                <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm mt-2 max-h-[400px] overflow-y-auto">
-                    <table class="min-w-full text-sm text-left relative border-collapse">
-                        <thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm">
-                            <tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${escapeHtml(h)}</th>`).join('')}</tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">${rows}</tbody>
-                    </table>
-                    ${footerText}
-                </div>`;
-        }
-
-        function exportCSV(id) {
-            const data = window.queryResults[id];
-            if(!data) return;
-            const headers = Object.keys(data[0]);
-            const csvContent = [
-                headers.join(','),
-                ...data.map(row => headers.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))
-            ].join('\n');
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `analysis_export_${Date.now()}.csv`;
-            link.click();
-        }
-
-        function copyToClipboard(elementId) {
-            const copyText = document.getElementById(elementId);
-            copyText.select();
-            navigator.clipboard.writeText(copyText.value);
-        }
-
-        async function runCustomSQL(id) {
-            const textarea = document.getElementById(`sql-${id}`);
-            const sql = textarea.value.trim();
-            if (!sql) return;
-            
-            const btn = textarea.nextElementSibling.querySelector('button:last-child');
-            const originalText = btn.innerText;
-            
-            btn.innerText = "Running...";
-            btn.disabled = true;
-            btn.classList.add("opacity-75", "cursor-not-allowed");
-            
+            // --- FIX FOR "<" ERROR: Handle non-JSON responses ---
+            const rawText = await res.text();
+            let data;
             try {
-                const res = await fetch('/api/run_custom_sql', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                    body: JSON.stringify({ sql_query: sql })
+                data = JSON.parse(rawText);
+            } catch (e) {
+                // If it's not JSON, it's an HTML error (500/404)
+                throw new Error("Server Error: " + rawText.substring(0, 100)); // Show start of error
+            }
+
+            if (!res.ok) {
+                if (res.status === 401) { localStorage.clear(); window.location.href = "/login"; return; }
+                throw new Error(data.detail || "API Error");
+            }
+            // ----------------------------------------------------
+
+            document.getElementById(loadingId).remove();
+
+            chatHistory.push({ role: "user", content: text });
+            if (data.sql) chatHistory.push({ role: "assistant", content: data.sql });
+            else if (data.message) chatHistory.push({ role: "assistant", content: data.message });
+            if (chatHistory.length > 8) chatHistory = chatHistory.slice(-8);
+
+            renderResponse(data);
+        } catch (err) {
+            if(document.getElementById(loadingId)) document.getElementById(loadingId).remove();
+            appendSystemMessage("Network Error: " + err.message, "text-red-500");
+        } finally {
+            input.disabled = false; btn.disabled = false; input.focus();
+        }
+    }
+
+    // --- HELPER FUNCTIONS (Preserved) ---
+    function appendUserMessage(text) {
+        const container = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.className = "flex justify-end space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+        const safeText = DOMPurify.sanitize(text).replace(/\n/g, '<br>');
+        div.innerHTML = `<div class="bg-blue-600 text-white px-6 py-3.5 rounded-2xl rounded-tr-none shadow-md max-w-2xl text-sm leading-relaxed">${safeText}</div>`;
+        container.insertBefore(div, document.getElementById('scroll-anchor'));
+        scrollToBottom();
+    }
+
+    function appendLoader() {
+        const id = 'loader-' + Date.now();
+        const container = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.id = id;
+        div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+        div.innerHTML = `
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white">AI</div>
+            <div class="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-3">
+                <span class="relative flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>
+                <span class="text-xs text-gray-500 font-medium">Analyzing data...</span>
+            </div>`;
+        container.insertBefore(div, document.getElementById('scroll-anchor'));
+        scrollToBottom();
+        return id;
+    }
+
+    function appendSystemMessage(text, colorClass = "text-gray-800") {
+        const container = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-6";
+        div.innerHTML = `
+            <div class="w-10 h-10 rounded-full bg-red-500 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md">!</div>
+            <div class="bg-white border border-red-100 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm ${colorClass}">${escapeHtml(text)}</div>`;
+        container.insertBefore(div, document.getElementById('scroll-anchor'));
+        scrollToBottom();
+    }
+
+    function renderResponse(data) {
+        const resultId = Date.now();
+        if(data.data) window.queryResults[resultId] = data.data;
+        window.resultRegistry[resultId] = data;
+
+        const container = document.getElementById('chat-container');
+        const div = document.createElement('div');
+        div.className = "flex space-x-4 max-w-4xl mx-auto fade-in-up mb-8";
+        
+        let content = '';
+        
+        if (data.type === 'error') {
+            content = `<div class="text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100 flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>${escapeHtml(data.message)}</div>`;
+        } else if (data.type === 'text') {
+            const rawHtml = marked.parse(data.message);
+            const safeHtml = DOMPurify.sanitize(rawHtml);
+            content = `<div class="text-slate-700 text-sm leading-relaxed prose">${safeHtml}</div>`;
+        } else {
+            if (data.thought) {
+                content += `<div class="flex items-center gap-2 mb-3 text-[11px] text-slate-400 font-mono bg-slate-50 p-2 rounded border border-slate-100 w-fit select-none"><span>🧠 Logic:</span> <span class="text-slate-600 font-medium">${escapeHtml(data.thought)}</span></div>`;
+            }
+
+            content += `
+                <details class="group mb-4">
+                    <summary class="text-xs text-blue-600 cursor-pointer hover:text-blue-800 font-medium flex items-center gap-1 select-none transition-colors">
+                        <svg class="w-3 h-3 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        View SQL Query
+                    </summary>
+                    <div class="mt-2 relative">
+                        <div class="absolute top-0 left-0 w-full h-8 bg-slate-800 rounded-t-lg flex items-center px-3 gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500"></div><div class="w-2.5 h-2.5 rounded-full bg-yellow-500"></div><div class="w-2.5 h-2.5 rounded-full bg-green-500"></div></div>
+                        <textarea class="w-full bg-slate-900 text-blue-300 font-mono text-xs p-4 pt-10 rounded-lg h-32 focus:ring-2 focus:ring-blue-500 outline-none resize-y shadow-inner border border-slate-700 leading-relaxed" spellcheck="false" id="sql-${resultId}">${escapeHtml(data.sql)}</textarea>
+                        <div class="absolute top-2 right-2 flex gap-2">
+                            <button onclick="copyToClipboard('sql-${resultId}')" class="text-slate-400 hover:text-white text-[10px] px-2 py-1 transition-colors" title="Copy SQL">📋</button>
+                            <button onclick="runCustomSQL(${resultId})" class="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-3 py-1 rounded shadow transition-colors font-medium">Run Edit</button>
+                        </div>
+                    </div>
+                </details>`;
+
+            if (data.suggestions && data.suggestions.length > 0) {
+                content += `<div class="flex flex-wrap gap-2 mb-3 fade-in-up" style="animation-delay: 0.1s">`;
+                data.suggestions.forEach(chip => {
+                    content += `<button onclick="fillInput('${escapeHtml(chip.prompt)}'); sendMessage()" class="text-[11px] font-medium text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm"><span class="text-blue-400 font-bold">+</span> ${escapeHtml(chip.label)}</button>`;
                 });
-                
-                const data = await res.json();
-                
-                if (data.type === 'error') {
-                    appendSystemMessage("SQL Execution Failed: " + data.message, "text-red-600");
-                } else {
-                    renderResponse(data);
-                }
-            } catch(e) {
-                alert("Execution Error: " + e);
-            } finally {
-                btn.innerText = originalText;
-                btn.disabled = false;
-                btn.classList.remove("opacity-75", "cursor-not-allowed");
+                content += `</div>`;
+            }
+
+            const chartId = 'viz-' + resultId;
+            const containerId = 'viz-container-' + resultId;
+            
+            if (data.visual_type === 'plotly' && data.plotly_code) {
+                const currentType = data.plotly_code.data[0].type;
+                content += `
+                <div class="flex gap-1.5 mb-2 overflow-x-auto no-scrollbar pb-1" id="toolbar-${resultId}">
+                    <button onclick="switchVisual(${resultId}, 'bar')" data-type="bar" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'bar' ? 'active' : ''}">📊 Bar</button>
+                    <button onclick="switchVisual(${resultId}, 'line')" data-type="line" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors ${currentType === 'scatter' ? 'active' : ''}">📈 Line</button>
+                    <button onclick="switchVisual(${resultId}, 'area')" data-type="area" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">📉 Area</button>
+                    <button onclick="switchVisual(${resultId}, 'pie')" data-type="pie" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🥧 Pie</button>
+                    <button onclick="switchVisual(${resultId}, 'table')" data-type="table" class="viz-btn px-2.5 py-1 text-[10px] font-medium border border-slate-200 rounded-md text-slate-600 hover:bg-slate-50 transition-colors">🔢 Table</button>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm mb-4"><div id="${containerId}" class="w-full"><div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div></div></div>`;
+                setTimeout(() => { Plotly.purge(chartId); Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false}); }, 50);
+            } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
+                content += `<div id="${containerId}">${generateTable(data.data)}</div>`;
+            } else {
+                content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
+            }
+
+            if (data.data && data.data.length > 0) {
+                content += `<div class="mt-3 flex gap-2 justify-end"><button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Download CSV</button></div>`;
             }
         }
-    </script>
+
+        div.innerHTML = `<div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-md ring-4 ring-white mt-1">AI</div><div class="bg-white border border-gray-200 p-5 rounded-2xl rounded-tl-none shadow-sm w-full overflow-hidden">${content}</div>`;
+        container.insertBefore(div, document.getElementById('scroll-anchor'));
+        scrollToBottom();
+    }
+
+    function switchVisual(id, type) {
+        const entry = window.resultRegistry[id];
+        const container = document.getElementById('viz-container-' + id);
+        const toolbar = document.getElementById('toolbar-' + id);
+        if (!entry || !container) return;
+
+        if (toolbar) {
+            toolbar.querySelectorAll('button').forEach(btn => {
+                if (btn.getAttribute('data-type') === type) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+        }
+
+        if (type === 'table') {
+            container.innerHTML = generateTable(entry.data);
+            return;
+        }
+
+        const chartId = 'viz-' + id;
+        container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div>`;
+        
+        let layout = JSON.parse(JSON.stringify(entry.plotly_code.layout));
+        let data = JSON.parse(JSON.stringify(entry.plotly_code.data));
+        const firstTrace = data[0];
+        const isNumericY = firstTrace.y.every(val => !isNaN(parseFloat(val)));
+
+        if (type === 'pie') {
+            if (entry.data.length > 20) { alert("Dataset too large for Pie chart (Limit: 20 rows)."); return; }
+            if (!isNumericY) { alert("Pie charts require numeric values."); return; }
+            firstTrace.type = 'pie'; firstTrace.labels = firstTrace.x; firstTrace.values = firstTrace.y; firstTrace.x = null; firstTrace.y = null; firstTrace.textinfo = "label+percent"; firstTrace.hovertemplate = null;
+            layout.xaxis = { visible: false }; layout.yaxis = { visible: false };
+            data = [firstTrace];
+        } else {
+            if ((type === 'line' || type === 'area') && !isNumericY) { alert("Line/Area charts require numeric values on Y-axis."); return; }
+            data.forEach(trace => {
+                if (type === 'bar') { trace.type = 'bar'; trace.mode = undefined; trace.fill = undefined; } 
+                else if (type === 'line') { trace.type = 'scatter'; trace.mode = 'lines+markers'; trace.fill = 'none'; trace.line = { shape: 'spline', width: 3 }; } 
+                else if (type === 'area') { trace.type = 'scatter'; trace.mode = 'lines'; trace.fill = 'tozeroy'; trace.line = { shape: 'spline' }; }
+            });
+        }
+
+        try { Plotly.purge(chartId); Plotly.newPlot(chartId, data, layout, {responsive: true, displayModeBar: false}); } catch(e) { console.error("Switch failed", e); }
+    }
+
+    function formatNumber(num) { return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num); }
+
+    function generateTable(data) {
+        if (!data || data.length === 0) return '';
+        const displayData = [...data].reverse().slice(0, 10); 
+        const headers = Object.keys(data[0]);
+        let rows = '';
+        displayData.forEach((row, idx) => {
+            const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+            const cells = Object.values(row).map((v, colIndex) => {
+                let displayVal = v;
+                const colName = headers[colIndex].toLowerCase(); 
+                const isIdCol = colName.includes('code') || colName.includes('id') || colName.endsWith('_id');
+                if (typeof v === 'number' && !isIdCol) displayVal = formatNumber(v);
+                return `<td class="px-4 py-2.5 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${escapeHtml(displayVal)}</td>`;
+            }).join('');
+            rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">${cells}</tr>`;
+        });
+        const footerText = data.length > 10 ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">Showing latest 10 of ${data.length} rows. <span class="font-semibold text-slate-500 cursor-pointer hover:text-blue-600" onclick="exportCSV(${Date.now()})">Download CSV</span> for full history.</div>` : '';
+        return `<div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm mt-2 max-h-[400px] overflow-y-auto"><table class="min-w-full text-sm text-left relative border-collapse"><thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm"><tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100">${rows}</tbody></table>${footerText}</div>`;
+    }
+
+    function exportCSV(id) {
+        const data = window.queryResults[id]; if(!data) return;
+        const headers = Object.keys(data[0]);
+        const csvContent = [headers.join(','), ...data.map(row => headers.map(h => `"${String(row[h]).replace(/"/g, '""')}"`).join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `analysis_export_${Date.now()}.csv`;
+        link.click();
+    }
+
+    function copyToClipboard(elementId) {
+        const copyText = document.getElementById(elementId);
+        copyText.select();
+        navigator.clipboard.writeText(copyText.value);
+    }
+
+    async function runCustomSQL(id) {
+        const textarea = document.getElementById(`sql-${id}`);
+        const sql = textarea.value.trim();
+        if (!sql) return;
+        const btn = textarea.nextElementSibling.querySelector('button:last-child');
+        const originalText = btn.innerText;
+        btn.innerText = "Running..."; btn.disabled = true; btn.classList.add("opacity-75", "cursor-not-allowed");
+        try {
+            const res = await fetch('/api/run_custom_sql', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }, body: JSON.stringify({ sql_query: sql }) });
+            const data = await res.json();
+            if (data.type === 'error') { appendSystemMessage("SQL Execution Failed: " + data.message, "text-red-600"); } else { renderResponse(data); }
+        } catch(e) { alert("Execution Error: " + e); } finally { btn.innerText = originalText; btn.disabled = false; btn.classList.remove("opacity-75", "cursor-not-allowed"); }
+    }
+</script>
 {% endblock %}
