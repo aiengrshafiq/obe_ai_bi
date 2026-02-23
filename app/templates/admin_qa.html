@@ -4,6 +4,7 @@
 
 {% block page_content %}
 <div class="flex-1 flex flex-col h-full bg-[#f8fafc] overflow-y-auto">
+    
     <header class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm flex-none">
         <div class="flex items-center gap-3">
             <h2 class="text-lg font-semibold text-slate-800 tracking-tight">AI Tribunal</h2>
@@ -12,6 +13,7 @@
     </header>
 
     <div class="p-8 max-w-7xl mx-auto w-full">
+        
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8 relative overflow-hidden">
             <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
@@ -19,11 +21,12 @@
                     <p class="text-sm text-slate-500">Run the "Red Team" agent to test the system against logical traps.</p>
                 </div>
                 <div class="flex items-center gap-3">
-                    <select id="test-count" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium">
+                    <select id="test-count" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium cursor-pointer">
                         <option value="5">⚡ 5 Tests (Smoke)</option>
                         <option value="20">🧪 20 Tests (Standard)</option>
+                        <option value="50">🔥 50 Tests (Deep)</option>
                     </select>
-                    <button onclick="window.runTests()" id="run-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md">
+                    <button onclick="window.runTests()" id="run-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md hover:shadow-lg">
                         <span>▶️ Run Tribunal</span>
                     </button>
                 </div>
@@ -40,8 +43,9 @@
             </div>
         </div>
 
-        <div id="report-container" class="hidden mb-12">
+        <div id="report-container" class="hidden mb-12 fade-in-up">
             <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Current Run Results</h3>
+            
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</div>
@@ -56,11 +60,13 @@
                     <div class="text-4xl font-black text-red-500 mt-2" id="score-failed">--</div>
                 </div>
             </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-bold tracking-wider">
                         <tr>
                             <th class="px-6 py-4 border-b border-gray-200">Verdict</th>
+                            <th class="px-6 py-4 border-b border-gray-200">Category</th>
                             <th class="px-6 py-4 border-b border-gray-200 w-1/3">Scenario</th>
                             <th class="px-6 py-4 border-b border-gray-200">Reasoning</th>
                         </tr>
@@ -90,9 +96,9 @@
 </div>
 {% endblock %}
 
-{% block page_scripts %}
+{% block scripts %}
 <script>
-    // 1. History Loader (Runs immediately)
+    // 1. History Loader (Runs immediately on load)
     document.addEventListener('DOMContentLoaded', loadHistory);
 
     async function loadHistory() {
@@ -111,7 +117,7 @@
 
             tbody.innerHTML = data.map(run => {
                 const score = parseFloat(run.accuracy.replace('%', ''));
-                const colorClass = score >= 90 ? 'text-emerald-600' : 'text-red-600';
+                const colorClass = score >= 90 ? 'text-emerald-600' : (score >= 70 ? 'text-yellow-600' : 'text-red-600');
                 const date = new Date(run.timestamp).toLocaleString();
                 return `<tr class="hover:bg-slate-50 transition-colors">
                     <td class="px-6 py-3 font-mono text-xs text-slate-600">${date}</td>
@@ -132,13 +138,25 @@
         const count = document.getElementById('test-count').value;
         const progress = document.getElementById('progress-container');
         const bar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
         
-        btn.disabled = true; btn.classList.add('opacity-75', 'cursor-not-allowed');
+        // Reset UI State
+        btn.disabled = true; 
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
         progress.classList.remove('hidden');
         document.getElementById('report-container').classList.add('hidden');
+        bar.style.width = "0%";
+        progressText.innerText = "0%";
         
+        // Animated Progress Bar (Visual only, backend is single await)
         let w = 0;
-        const interval = setInterval(() => { if(w < 95) { w += 2; bar.style.width = w + "%"; } }, 500);
+        const interval = setInterval(() => { 
+            if(w < 95) { 
+                w += 2; 
+                bar.style.width = w + "%"; 
+                progressText.innerText = Math.round(w) + "%";
+            } 
+        }, 500);
 
         try {
             const res = await fetch('/api/admin/qa/run', {
@@ -147,30 +165,52 @@
                 body: JSON.stringify({ count: parseInt(count) })
             });
             
-            // Safe JSON Parse
+            // Safe JSON Parse logic
             const rawText = await res.text();
             let data;
-            try { data = JSON.parse(rawText); } catch(e) { throw new Error("Server Error: " + rawText.substring(0, 100)); }
+            try { 
+                data = JSON.parse(rawText); 
+            } catch(e) { 
+                throw new Error("Server Error (HTML Response): " + rawText.substring(0, 100).replace(/<[^>]*>?/gm, '')); 
+            }
 
             if (!res.ok) throw new Error(data.detail || "Error running tests");
 
-            clearInterval(interval); bar.style.width = "100%";
-            renderReport(data);
-            loadHistory(); // Refresh history
+            // Success
+            clearInterval(interval); 
+            bar.style.width = "100%";
+            progressText.innerText = "100%";
+            
+            // Delay slightly to show 100% before showing report
+            setTimeout(() => {
+                renderReport(data);
+                progress.classList.add('hidden'); // Hide progress bar on success
+                loadHistory(); // Refresh history table
+            }, 600);
             
         } catch (e) {
             alert("Test Failed: " + e.message);
             clearInterval(interval);
+            progress.classList.add('hidden'); // Hide progress bar on failure
         } finally {
-            btn.disabled = false; btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            btn.disabled = false; 
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     };
 
     function renderReport(data) {
-        document.getElementById('report-container').classList.remove('hidden');
+        const container = document.getElementById('report-container');
+        container.classList.remove('hidden');
+        
+        // Trigger reflow for animation
+        void container.offsetWidth; 
+        container.classList.add('fade-in-up');
+
         const acc = Math.round((data.passed / data.total) * 100);
-        document.getElementById('score-accuracy').innerText = isNaN(acc) ? "0%" : acc + "%";
-        document.getElementById('score-accuracy').className = `text-4xl font-black mt-2 ${acc >= 90 ? 'text-emerald-500' : 'text-red-500'}`;
+        const accEl = document.getElementById('score-accuracy');
+        accEl.innerText = isNaN(acc) ? "0%" : acc + "%";
+        accEl.className = `text-4xl font-black mt-2 ${acc >= 90 ? 'text-emerald-500' : 'text-red-500'}`;
+        
         document.getElementById('score-passed').innerText = data.passed;
         document.getElementById('score-failed').innerText = data.failed;
 
@@ -186,14 +226,23 @@
             const tr = document.createElement('tr');
             tr.className = isPass ? "bg-white hover:bg-slate-50 transition-colors" : "bg-red-50/20 hover:bg-red-50/40 transition-colors";
             
+            // RENDERS 4 COLUMNS NOW (Matches Header)
             tr.innerHTML = `
                 <td class="px-6 py-4 align-top">${badge}</td>
-                <td class="px-6 py-4 align-top"><span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">${row.category || 'General'}</span></td>
+                <td class="px-6 py-4 align-top">
+                    <span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                        ${row.category || 'General'}
+                    </span>
+                </td>
                 <td class="px-6 py-4 align-top">
                     <div class="font-medium text-slate-800 text-sm leading-relaxed">"${row.question}"</div>
-                    <div class="mt-2 text-[10px] font-mono text-slate-400 truncate max-w-xs">${row.sql}</div>
+                    <div class="mt-2 text-[10px] font-mono text-slate-400 truncate max-w-xs p-1 bg-slate-50 rounded border border-slate-100">
+                        ${row.sql}
+                    </div>
                 </td>
-                <td class="px-6 py-4 align-top text-slate-600 font-medium text-sm">${row.failure_reason}</td>
+                <td class="px-6 py-4 align-top text-slate-600 font-medium text-sm">
+                    ${row.failure_reason}
+                </td>
             `;
             tbody.appendChild(tr);
         });
