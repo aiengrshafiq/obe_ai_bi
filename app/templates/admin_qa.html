@@ -1,5 +1,7 @@
 {% extends "layout_app.html" %}
 
+{% block title %}AI Tribunal | OneBullEx{% endblock %}
+
 {% block page_content %}
     <header class="hidden md:flex h-16 flex-none border-b border-gray-100 items-center justify-between px-8 bg-white z-10 shadow-sm">
         <div class="flex items-center gap-3">
@@ -15,7 +17,7 @@
             <div class="relative z-10 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
                     <h3 class="font-bold text-slate-800 text-lg">Adversarial Evaluation</h3>
-                    <p class="text-sm text-slate-500">Run the "Red Team" agent to test the system against 100+ logical traps.</p>
+                    <p class="text-sm text-slate-500">Run the "Red Team" agent to test the system against logical traps.</p>
                 </div>
                 <div class="flex items-center gap-3">
                     <select id="test-count" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium">
@@ -28,7 +30,6 @@
                     </button>
                 </div>
             </div>
-            
             <div id="progress-container" class="hidden mt-6">
                 <div class="flex justify-between text-xs font-bold text-indigo-600 mb-1 uppercase tracking-wider">
                     <span class="animate-pulse">Running Simulation...</span>
@@ -40,8 +41,9 @@
             </div>
         </div>
 
-        <div id="report-container" class="hidden fade-in-up max-w-6xl mx-auto">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div id="report-container" class="hidden fade-in-up max-w-6xl mx-auto mb-12">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Current Run Results</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</div>
                     <div class="text-4xl font-black text-slate-800 mt-2" id="score-accuracy">--%</div>
@@ -55,7 +57,6 @@
                     <div class="text-4xl font-black text-red-500 mt-2" id="score-failed">--</div>
                 </div>
             </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table class="w-full text-left border-collapse">
                     <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-bold tracking-wider">
@@ -70,22 +71,72 @@
                 </table>
             </div>
         </div>
+
+        <div class="max-w-6xl mx-auto">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Past Tribunals</h3>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-bold tracking-wider">
+                        <tr>
+                            <th class="px-6 py-3 border-b border-gray-200">Date</th>
+                            <th class="px-6 py-3 border-b border-gray-200 text-center">Tests</th>
+                            <th class="px-6 py-3 border-b border-gray-200 text-center">Passed</th>
+                            <th class="px-6 py-3 border-b border-gray-200 text-right">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table" class="divide-y divide-gray-100 text-sm">
+                        <tr><td colspan="4" class="px-6 py-4 text-center text-slate-400 italic">Loading history...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 {% endblock %}
 
-{% block scripts %}
+{% block page_scripts %}
 <script>
+    // Load history on page load
+    document.addEventListener('DOMContentLoaded', loadHistory);
+
+    async function loadHistory() {
+        try {
+            const res = await fetch('/api/admin/qa/history');
+            const data = await res.json();
+            const tbody = document.getElementById('history-table');
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">No previous runs found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.map(run => {
+                const score = parseFloat(run.accuracy.replace('%', ''));
+                const colorClass = score >= 90 ? 'text-emerald-600' : (score >= 70 ? 'text-yellow-600' : 'text-red-600');
+                
+                // Parse timestamp cleanly
+                const date = new Date(run.timestamp).toLocaleString();
+
+                return `
+                <tr class="hover:bg-slate-50 transition-colors">
+                    <td class="px-6 py-3 font-mono text-xs text-slate-600">${date}</td>
+                    <td class="px-6 py-3 text-center text-slate-700">${run.total}</td>
+                    <td class="px-6 py-3 text-center text-slate-700">${run.passed}</td>
+                    <td class="px-6 py-3 text-right font-bold ${colorClass}">${run.accuracy}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) {
+            console.error("History load failed", e);
+        }
+    }
+
     async function runTests() {
         const btn = document.getElementById('run-btn');
         const count = document.getElementById('test-count').value;
         const progress = document.getElementById('progress-container');
         const bar = document.getElementById('progress-bar');
-        const container = document.getElementById('report-container');
         
-        btn.disabled = true;
-        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        btn.disabled = true; btn.classList.add('opacity-75', 'cursor-not-allowed');
         progress.classList.remove('hidden');
-        container.classList.add('hidden');
         
         let w = 0;
         const interval = setInterval(() => { if(w < 95) { w += 2; bar.style.width = w + "%"; } }, 500);
@@ -97,42 +148,32 @@
                 body: JSON.stringify({ count: parseInt(count) })
             });
             
-            // Safe JSON Parse
             const rawText = await res.text();
             let data;
-            try { data = JSON.parse(rawText); } 
-            catch(e) { throw new Error("Server Error: " + rawText.substring(0, 100)); }
+            try { data = JSON.parse(rawText); } catch(e) { throw new Error("Server Error: " + rawText.substring(0, 100)); }
 
             if (!res.ok) throw new Error(data.detail || "Error running tests");
 
-            clearInterval(interval);
-            bar.style.width = "100%";
-            document.getElementById('progress-text').innerText = "100%";
-            
-            setTimeout(() => {
-                renderReport(data);
-                progress.classList.add('hidden');
-                bar.style.width = "0%";
-            }, 500);
+            clearInterval(interval); bar.style.width = "100%";
+            renderReport(data);
+            loadHistory(); // Refresh history list
             
         } catch (e) {
             alert("Test Failed: " + e.message);
             clearInterval(interval);
         } finally {
-            btn.disabled = false;
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            btn.disabled = false; btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     }
 
     function renderReport(data) {
         document.getElementById('report-container').classList.remove('hidden', 'fade-in-up');
-        void document.getElementById('report-container').offsetWidth; // Trigger reflow
+        void document.getElementById('report-container').offsetWidth; 
         document.getElementById('report-container').classList.add('fade-in-up');
 
         const acc = Math.round((data.passed / data.total) * 100);
         document.getElementById('score-accuracy').innerText = isNaN(acc) ? "0%" : acc + "%";
         document.getElementById('score-accuracy').className = `text-4xl font-black mt-2 ${acc >= 90 ? 'text-emerald-500' : 'text-red-500'}`;
-        
         document.getElementById('score-passed').innerText = data.passed;
         document.getElementById('score-failed').innerText = data.failed;
 

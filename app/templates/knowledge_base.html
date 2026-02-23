@@ -3,9 +3,9 @@
 {% block title %}Knowledge Base | OneBullEx{% endblock %}
 
 {% block page_content %}
-<div class="flex-1 flex flex-col h-full bg-gray-50 overflow-hidden">
+<div class="flex-1 flex flex-col h-full bg-slate-50 overflow-hidden">
     
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-20 flex-none">
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-20 flex-none shadow-sm">
         <div class="px-6 h-16 flex items-center gap-3">
             <span class="text-xl">📚</span>
             <h1 class="text-lg font-bold text-slate-900 tracking-tight">Data Dictionary</h1>
@@ -17,77 +17,37 @@
             <table class="min-w-full leading-normal">
                 <thead>
                     <tr>
-                        <th class="px-5 py-4 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        <th class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 text-left text-xs font-bold text-gray-500 uppercase tracking-wider w-1/3">
                             Table Name
                         </th>
-                        <th class="px-5 py-4 border-b-2 border-gray-200 bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
-                            Description
+                        <th class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            Description & Semantics
                         </th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
+                    <tr class="hover:bg-blue-50/20 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono font-semibold text-blue-700 bg-slate-50/30">
                             public.user_profile_360
                         </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Daily snapshot of user profiles with registration dates, deposit/withdrawal volumes, active status flags, segments, and other user attributes.
+                        <td class="px-6 py-4 text-sm text-gray-600 leading-relaxed">
+                            Daily snapshot of user profiles. Contains registration dates, lifetime volume, active status, and segments.
                         </td>
                     </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
-                            public.dwd_activity_t_points_user_task_di
-                        </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Points System Cube - Activity logs tracking how users earn and spend points (check-ins, lucky spins, referrals).
-                        </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
+                    <tr class="hover:bg-blue-50/20 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono font-semibold text-blue-700 bg-slate-50/30">
                             public.dws_all_trades_di
                         </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Trade Activity Cube - Complete trade records with details on order types, volumes, fees, and execution metrics.
+                        <td class="px-6 py-4 text-sm text-gray-600 leading-relaxed">
+                            Trade Activity Log. Contains granular trade details (Spot/Futures), fees, volume, and order status.
                         </td>
                     </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
-                            public.dws_user_deposit_withdraw_detail_di
-                        </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Transaction Detail Cube - Granular deposit and withdrawal records for audit, wallet checks, and net flow analysis.
-                        </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
-                            public.dwd_login_history_log_di
-                        </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Login History Cube - Audit trail of user logins, IPs, locations, and device info.
-                        </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
-                            public.dwd_user_device_log_di
-                        </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Device & Fraud Log - Detailed fingerprinting, risk scores, VPN detection, and registration events.
-                        </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
-                            public.ads_total_root_referral_volume_df
-                        </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Referral Performance Cube - Partner metrics including referral volumes, community size, and commissions.
-                        </td>
-                    </tr>
-                    <tr class="hover:bg-blue-50/30 transition-colors">
-                        <td class="px-5 py-4 text-sm font-mono font-medium text-blue-700">
+                    <tr class="hover:bg-blue-50/20 transition-colors">
+                        <td class="px-6 py-4 text-sm font-mono font-semibold text-blue-700 bg-slate-50/30">
                             public.risk_campaign_blacklist
                         </td>
-                        <td class="px-5 py-4 text-sm text-gray-700 leading-relaxed">
-                            Risk Campaign Blacklist - Registry of blocked/banned users.
+                        <td class="px-6 py-4 text-sm text-gray-600 leading-relaxed">
+                            Risk Registry. Banned users with reasons and ban duration. **Note:** No 'ds' column.
                         </td>
                     </tr>
                 </tbody>
