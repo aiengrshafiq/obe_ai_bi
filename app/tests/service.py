@@ -7,7 +7,8 @@ from openai import OpenAI
 from app.core.config import settings
 from app.core.cube_registry import CubeRegistry
 from app.services.vanna_wrapper import vn
-from app.db.safe_sql_runner import runner 
+# FIX: Import 'engine' explicitly
+from app.db.safe_sql_runner import runner, engine 
 
 # Separate client for the Judge to ensure unbiased grading
 judge_client = OpenAI(
@@ -155,7 +156,8 @@ class QAService:
         accuracy = (passed_count / total) * 100 if total > 0 else 0
         
         # 3. Write to Hologres (Synchronously via safe engine)
-        with runner.engine.connect() as conn:
+        # FIX: Use 'engine' directly, not 'runner.engine'
+        with engine.connect() as conn:
             # A. Insert Summary
             conn.execute(text("""
                 INSERT INTO ai_pilot.qa_test_runs 
@@ -188,7 +190,7 @@ class QAService:
             
             conn.commit()
 
-        # 4. Return Data for Frontend
+        # 4. Return Data for Frontend Display
         return {
             "id": run_id,
             "passed": passed_count,
@@ -206,7 +208,8 @@ class QAService:
     @staticmethod
     def get_history():
         """Fetches last 10 runs from Hologres."""
-        with runner.engine.connect() as conn:
+        # FIX: Use 'engine' directly
+        with engine.connect() as conn:
             result = conn.execute(text("""
                 SELECT run_id, start_time, total_tests, passed_tests, accuracy_score 
                 FROM ai_pilot.qa_test_runs 
