@@ -221,3 +221,14 @@ async def run_custom_sql_endpoint(payload: CustomSQLRequest, current_user: User 
         }
     except Exception as e:
         return {"type": "error", "message": str(e)}
+
+
+@router.get("/admin/qa", response_class=HTMLResponse)
+async def qa_tribunal_page(request: Request, current_user: User = Depends(get_current_user)):
+    """
+    Renders the AI Tribunal Dashboard.
+    """
+    return templates.TemplateResponse("admin_qa.html", {
+        "request": request, 
+        "user": current_user
+    })

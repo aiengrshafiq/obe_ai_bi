@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routers import web_ui
 from app.db.vanna_db import setup_vanna_db_connection
+from app.api.qa_routes import router as qa_router
 # REMOVED: from app.services.vanna_training import train_vanna_on_startup
 
 # --- 1. LIFESPAN MANAGER ---
@@ -59,6 +60,7 @@ app.add_middleware(
 
 # --- 5. ROUTERS ---
 app.include_router(web_ui.router)
+app.include_router(qa_router, prefix="/api/admin/qa", tags=["Admin QA"])
 
 # --- 6. ENTRY POINT ---
 if __name__ == "__main__":

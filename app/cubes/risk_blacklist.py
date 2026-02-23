@@ -25,6 +25,10 @@ DOCS = """
 The **Single Source of Truth** for Blacklisted, Banned, and Blocked users.
 If a user is in this table, they are risky/banned.
 
+** ⚠️ CRITICAL EXCEPTION (NO PARTITION):**
+- **This table does NOT have a `ds` column.** - **DO NOT** attempt to filter by `ds`.
+- Ignore the global rule about `ds = '{latest_ds}'` for this specific table.
+
 **Critical Rules:**
 1. **Time Analysis:** NEVER use 'create_at'. You MUST use `start_date` to find when a user was blacklisted.
 2. **Lookup Pattern:** - Users usually provide a list of IDs. Use `WHERE user_code IN (...)`.

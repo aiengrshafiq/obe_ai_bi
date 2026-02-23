@@ -1,0 +1,223 @@
+# app/tests/service.py
+import json
+import asyncio
+from datetime import datetime
+from sqlalchemy import text
+from openai import OpenAI
+from app.core.config import settings
+from app.core.cube_registry import CubeRegistry
+from app.services.vanna_wrapper import vn
+from app.db.safe_sql_runner import runner 
+
+# Separate client for the Judge to ensure unbiased grading
+judge_client = OpenAI(
+    api_key=settings.DASHSCOPE_API_KEY,
+    base_url=settings.AI_BASE_URL,
+)
+
+class QAService:
+    
+    @staticmethod
+    def _get_schema_context():
+        """
+        Fetches DDL + Docs for the Judge.
+        This provides the 'Ground Truth' for the AI Critic.
+        """
+        context = ""
+        for name, cube in CubeRegistry._registry.items():
+            context += f"\nTABLE: {name} (KIND: {cube.kind})\nDDL: {cube.ddl}\nRULES: {cube.docs}\n"
+        return context
+
+    @staticmethod
+    async def generate_test_cases(n=5):
+        """
+        Agent A: The Red Team Generator.
+        Creates 'Trap' questions designed to break the system.
+        """
+        schema = QAService._get_schema_context()
+        prompt = f"""
+        You are a QA Lead for a BI Tool. 
+        SCHEMA: {schema}
+        
+        Generate {n} diverse SQL test questions.
+        
+        MANDATORY CATEGORIES:
+        1. **Date Logic:** "Last Month", "Since Jan 1st" (Tests strict date handling).
+        2. **Join Logic:** "Total volume for Partner X" (Tests if it uses Snapshot totals vs Incremental joins).
+        3. **Filters:** "High risk users" (Tests boolean flags).
+        4. **Aggregation:** "Daily trend" (Tests LIMIT handling).
+        5. **Exceptions:** "Blacklisted users" (Tests the 'No ds partition' exception).
+        
+        OUTPUT format: JSON array of strings ["q1", "q2"...]
+        """
+        
+        try:
+            response = judge_client.chat.completions.create(
+                model=settings.AI_MODEL_NAME, 
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7 
+            )
+            content = response.choices[0].message.content.replace("```json", "").replace("```", "").strip()
+            return json.loads(content)
+        except Exception as e:
+            print(f"QA Gen Error: {e}")
+            # Fallback questions if Generator fails
+            return [
+                "Show total trading volume for partner 10000047",
+                "Show user registration trend for last month",
+                "List top 10 users by risk score",
+                "Show daily trading volume for the last 7 days",
+                "Show reason why user 10005727 is blacklisted"
+            ]
+
+    @staticmethod
+    def evaluate_sql(question, sql):
+        """
+        Agent B: The Judge.
+        Grades the SQL against the 'Iron Wall' rules without running it.
+        """
+        schema = QAService._get_schema_context()
+        prompt = f"""
+        You are a Senior SQL Code Reviewer. 
+        Question: "{question}"
+        Generated SQL: {sql}
+        
+        SCHEMA CONTEXT:
+        {schema}
+        
+        STRICT RUBRIC (Fail if ANY are violated):
+        1. **Date Math:** Must use `BETWEEN` or specific dates for "Last Month". No `INTERVAL` math.
+        2. **Snapshot Join:** If querying 'Total Volume' from a Snapshot, it MUST NOT join the Incremental Trades table.
+        3. **Snapshot Partition:** Must use `ds = '{{latest_ds}}'` (UNLESS the table is 'risk_campaign_blacklist', which has no ds).
+        4. **Trend Limit:** If Grouping by Date (Trend), there must be NO `LIMIT` clause.
+        
+        OUTPUT JSON:
+        {{
+            "score": 1 (Fail) or 5 (Pass),
+            "reason": "Brief explanation",
+            "category": "Date" | "Join" | "Syntax" | "Logic"
+        }}
+        """
+        
+        try:
+            response = judge_client.chat.completions.create(
+                model=settings.AI_MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0
+            )
+            return json.loads(response.choices[0].message.content.replace("```json", "").replace("```", ""))
+        except:
+            return {"score": 0, "reason": "Judge Crashed", "category": "System"}
+
+    @staticmethod
+    async def run_suite(count=5):
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        questions = await QAService.generate_test_cases(n=count)
+        
+        passed_count = 0
+        results_to_save = []
+        
+        # 1. Run Tests
+        for q in questions:
+            start_time = datetime.now()
+            try:
+                # Generate SQL using the real App Pipeline
+                sql = await vn.generate_sql_async(question=q)
+                
+                # Judge the result
+                verdict = QAService.evaluate_sql(q, sql)
+                
+                score = verdict.get('score', 0)
+                if score == 5: passed_count += 1
+                
+                results_to_save.append({
+                    "run_id": run_id,
+                    "question": q,
+                    "generated_sql": sql,
+                    "status": "PASS" if score == 5 else "FAIL",
+                    "failure_reason": verdict.get('reason', 'Unknown'),
+                    "failure_category": verdict.get('category', 'General'),
+                    "latency_ms": int((datetime.now() - start_time).total_seconds() * 1000)
+                })
+            except Exception as e:
+                results_to_save.append({
+                    "run_id": run_id,
+                    "question": q,
+                    "generated_sql": "ERROR",
+                    "status": "FAIL",
+                    "failure_reason": str(e),
+                    "failure_category": "Crash",
+                    "latency_ms": 0
+                })
+
+        # 2. Calculate Stats
+        total = len(questions)
+        accuracy = (passed_count / total) * 100 if total > 0 else 0
+        
+        # 3. Write to Hologres (Synchronously via safe engine)
+        with runner.engine.connect() as conn:
+            # A. Insert Summary
+            conn.execute(text("""
+                INSERT INTO ai_pilot.qa_test_runs 
+                (run_id, start_time, end_time, total_tests, passed_tests, accuracy_score, triggered_by)
+                VALUES (:rid, :start, :end, :total, :passed, :acc, 'admin')
+            """), {
+                "rid": run_id,
+                "start": datetime.now(), 
+                "end": datetime.now(),
+                "total": total,
+                "passed": passed_count,
+                "acc": accuracy
+            })
+            
+            # B. Insert Details
+            for res in results_to_save:
+                conn.execute(text("""
+                    INSERT INTO ai_pilot.qa_test_results 
+                    (run_id, question, generated_sql, status, failure_reason, failure_category, latency_ms)
+                    VALUES (:rid, :q, :sql, :stat, :reason, :cat, :lat)
+                """), {
+                    "rid": res["run_id"],
+                    "q": res["question"],
+                    "sql": res["generated_sql"],
+                    "stat": res["status"],
+                    "reason": res["failure_reason"],
+                    "cat": res["failure_category"],
+                    "lat": res["latency_ms"]
+                })
+            
+            conn.commit()
+
+        # 4. Return Data for Frontend
+        return {
+            "id": run_id,
+            "passed": passed_count,
+            "failed": total - passed_count,
+            "total": total,
+            "details": [{
+                "question": r["question"],
+                "sql": r["generated_sql"],
+                "score": 5 if r["status"] == "PASS" else 1,
+                "reason": r["failure_reason"],
+                "category": r["failure_category"]
+            } for r in results_to_save]
+        }
+
+    @staticmethod
+    def get_history():
+        """Fetches last 10 runs from Hologres."""
+        with runner.engine.connect() as conn:
+            result = conn.execute(text("""
+                SELECT run_id, start_time, total_tests, passed_tests, accuracy_score 
+                FROM ai_pilot.qa_test_runs 
+                ORDER BY start_time DESC 
+                LIMIT 10
+            """))
+            
+            return [{
+                "id": row.run_id,
+                "timestamp": row.start_time.isoformat(),
+                "total": row.total_tests,
+                "passed": row.passed_tests,
+                "accuracy": f"{row.accuracy_score}%"
+            } for row in result]
