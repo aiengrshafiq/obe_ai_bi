@@ -49,6 +49,10 @@
 
 {% block scripts %}
 <script>
+    // --- SECURITY: Immediate Auth Check ---
+    if (!localStorage.getItem('access_token')) {
+        window.location.href = "/login";
+    }
     // --- CHAT SPECIFIC LOGIC (Preserved from Backup) ---
     function escapeHtml(unsafe) {
         if (unsafe === null || unsafe === undefined) return "";
@@ -206,7 +210,8 @@
             if (data.suggestions && data.suggestions.length > 0) {
                 content += `<div class="flex flex-wrap gap-2 mb-3 fade-in-up" style="animation-delay: 0.1s">`;
                 data.suggestions.forEach(chip => {
-                    content += `<button onclick="fillInput('${escapeHtml(chip.prompt)}'); sendMessage()" class="text-[11px] font-medium text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm"><span class="text-blue-400 font-bold">+</span> ${escapeHtml(chip.label)}</button>`;
+                    
+                    content += `<button onclick="fillInput(this.dataset.prompt); sendMessage()" data-prompt="${escapeHtml(chip.prompt)}" class="text-[11px] font-medium text-blue-600 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 px-3 py-1.5 rounded-full transition-all flex items-center gap-1 shadow-sm"><span class="text-blue-400 font-bold">+</span> ${escapeHtml(chip.label)}</button>`;
                 });
                 content += `</div>`;
             }
@@ -227,7 +232,8 @@
                 <div class="bg-white border border-slate-200 rounded-xl p-1 shadow-sm mb-4"><div id="${containerId}" class="w-full"><div id="${chartId}" style="width: 100%; height: 400px;" class="rounded-lg overflow-hidden"></div></div></div>`;
                 setTimeout(() => { Plotly.purge(chartId); Plotly.newPlot(chartId, data.plotly_code.data, data.plotly_code.layout, {responsive: true, displayModeBar: false}); }, 50);
             } else if (data.visual_type === 'table' || (data.data && data.data.length > 0)) {
-                content += `<div id="${containerId}">${generateTable(data.data)}</div>`;
+                
+                content += `<div id="${containerId}">${generateTable(data.data, resultId)}</div>`;
             } else {
                 content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
             }
@@ -266,7 +272,9 @@
         let layout = JSON.parse(JSON.stringify(entry.plotly_code.layout));
         let data = JSON.parse(JSON.stringify(entry.plotly_code.data));
         const firstTrace = data[0];
-        const isNumericY = firstTrace.y.every(val => !isNaN(parseFloat(val)));
+        const yValues = Array.isArray(firstTrace?.y) ? firstTrace.y : [];
+        const isNumericY = yValues.length > 0 && yValues.every(val => !isNaN(parseFloat(val)));
+        
 
         if (type === 'pie') {
             if (entry.data.length > 20) { alert("Dataset too large for Pie chart (Limit: 20 rows)."); return; }
@@ -288,9 +296,13 @@
 
     function formatNumber(num) { return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(num); }
 
-    function generateTable(data) {
+    // REPLACE THE WHOLE generateTable FUNCTION WITH THIS:
+    function generateTable(data, resultId) {
         if (!data || data.length === 0) return '';
-        const displayData = [...data].reverse().slice(0, 10); 
+        
+        // FIX 1: Remove .reverse() to prevent flipping rankings (e.g. Top 10)
+        const displayData = data.slice(0, 10); 
+        
         const headers = Object.keys(data[0]);
         let rows = '';
         displayData.forEach((row, idx) => {
@@ -304,9 +316,16 @@
             }).join('');
             rows += `<tr class="${bgClass} hover:bg-blue-50/50 transition-colors">${cells}</tr>`;
         });
-        const footerText = data.length > 10 ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">Showing latest 10 of ${data.length} rows. <span class="font-semibold text-slate-500 cursor-pointer hover:text-blue-600" onclick="exportCSV(${Date.now()})">Download CSV</span> for full history.</div>` : '';
+        
+        // FIX 2: Use the actual resultId in onclick, not Date.now()
+        const footerText = data.length > 10 
+            ? `<div class="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t border-slate-100 italic">Showing top 10 of ${data.length} rows. <span class="font-semibold text-slate-500 cursor-pointer hover:text-blue-600" onclick="exportCSV(${resultId})">Download CSV</span> for full history.</div>` 
+            : '';
+            
         return `<div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm mt-2 max-h-[400px] overflow-y-auto"><table class="min-w-full text-sm text-left relative border-collapse"><thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm"><tr>${headers.map(h => `<th class="px-4 py-3 border-b border-slate-200 bg-slate-50">${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100">${rows}</tbody></table>${footerText}</div>`;
     }
+
+    
 
     function exportCSV(id) {
         const data = window.queryResults[id]; if(!data) return;
