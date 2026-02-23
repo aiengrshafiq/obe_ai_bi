@@ -224,3 +224,39 @@ class QAService:
                 "passed": row.passed_tests,
                 "accuracy": f"{row.accuracy_score}%"
             } for row in result]
+
+    
+
+    @staticmethod
+    def get_run_details(run_id: str):
+        """Fetches the detailed results for a specific historical run."""
+        with engine.connect() as conn:
+            # 1. Get Summary
+            summary = conn.execute(text("""
+                SELECT passed_tests, total_tests, accuracy_score 
+                FROM ai_pilot.qa_test_runs 
+                WHERE run_id = :rid
+            """), {"rid": run_id}).fetchone()
+            
+            if not summary:
+                return None
+
+            # 2. Get Details
+            rows = conn.execute(text("""
+                SELECT question, generated_sql, status, failure_reason, failure_category 
+                FROM ai_pilot.qa_test_results 
+                WHERE run_id = :rid
+            """), {"rid": run_id})
+            
+            return {
+                "passed": summary.passed_tests,
+                "total": summary.total_tests,
+                "accuracy": summary.accuracy_score,
+                "details": [{
+                    "question": r.question,
+                    "sql": r.generated_sql,
+                    "score": 5 if r.status == "PASS" else 1,
+                    "reason": r.failure_reason, # Ensures DB value maps to JSON 'reason'
+                    "category": r.failure_category
+                } for r in rows]
+            }

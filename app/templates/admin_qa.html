@@ -2,8 +2,12 @@
 
 {% block title %}AI Tribunal | OneBullEx{% endblock %}
 
+{% block head %}
+<style>[x-cloak] { display: none !important; }</style>
+{% endblock %}
+
 {% block page_content %}
-<div class="flex-1 flex flex-col h-full bg-[#f8fafc] overflow-y-auto">
+<div x-data="qaDashboard()" class="flex-1 flex flex-col h-full bg-[#f8fafc] overflow-y-auto" x-cloak>
     
     <header class="bg-white border-b border-gray-200 px-8 py-4 flex justify-between items-center sticky top-0 z-30 shadow-sm flex-none">
         <div class="flex items-center gap-3">
@@ -21,43 +25,45 @@
                     <p class="text-sm text-slate-500">Run the "Red Team" agent to test the system against logical traps.</p>
                 </div>
                 <div class="flex items-center gap-3">
-                    <select id="test-count" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium cursor-pointer">
+                    <select x-model="testCount" class="bg-slate-50 border border-gray-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium cursor-pointer">
                         <option value="5">⚡ 5 Tests (Smoke)</option>
                         <option value="20">🧪 20 Tests (Standard)</option>
                         <option value="50">🔥 50 Tests (Deep)</option>
                     </select>
-                    <button onclick="window.runTests()" id="run-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md hover:shadow-lg">
-                        <span>▶️ Run Tribunal</span>
+                    <button @click="runNewTests()" :disabled="isLoading" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-lg transition-all flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span x-text="isLoading ? 'Running...' : '▶️ Run Tribunal'"></span>
                     </button>
                 </div>
             </div>
             
-            <div id="progress-container" class="hidden mt-6">
+            <div x-show="isLoading" class="mt-6">
                 <div class="flex justify-between text-xs font-bold text-indigo-600 mb-1 uppercase tracking-wider">
                     <span class="animate-pulse">Running Simulation...</span>
-                    <span id="progress-text">0%</span>
+                    <span x-text="progress + '%'"></span>
                 </div>
                 <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                    <div id="progress-bar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 relative" style="width: 0%"></div>
+                    <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-300 relative" :style="`width: ${progress}%`"></div>
                 </div>
             </div>
         </div>
 
-        <div id="report-container" class="hidden mb-12 fade-in-up">
-            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Current Run Results</h3>
+        <div x-show="report" class="mb-12 transition-all duration-500">
+            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Assessment Results</h3>
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Accuracy</div>
-                    <div class="text-4xl font-black text-slate-800 mt-2" id="score-accuracy">--%</div>
+                    <div class="text-4xl font-black mt-2" 
+                         :class="report?.accuracy >= 90 ? 'text-emerald-500' : (report?.accuracy >= 70 ? 'text-yellow-500' : 'text-red-500')"
+                         x-text="(report?.accuracy || 0) + '%'">--%</div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Passed</div>
-                    <div class="text-4xl font-black text-emerald-500 mt-2" id="score-passed">--</div>
+                    <div class="text-4xl font-black text-emerald-500 mt-2" x-text="report?.passed || 0">--</div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 text-center">
                     <div class="text-xs font-bold text-slate-400 uppercase tracking-wider">Failed</div>
-                    <div class="text-4xl font-black text-red-500 mt-2" id="score-failed">--</div>
+                    <div class="text-4xl font-black text-red-500 mt-2" x-text="report?.failed || 0">--</div>
                 </div>
             </div>
 
@@ -69,9 +75,30 @@
                             <th class="px-6 py-4 border-b border-gray-200">Category</th>
                             <th class="px-6 py-4 border-b border-gray-200 w-1/3">Scenario</th>
                             <th class="px-6 py-4 border-b border-gray-200">Reasoning</th>
+                            <th class="px-6 py-4 border-b border-gray-200 text-right">Action</th>
                         </tr>
                     </thead>
-                    <tbody id="results-table" class="divide-y divide-gray-100 text-sm"></tbody>
+                    <tbody class="divide-y divide-gray-100 text-sm">
+                        <template x-for="row in report?.details" :key="row.question">
+                            <tr class="transition-colors" :class="row.score === 5 ? 'bg-white hover:bg-slate-50' : 'bg-red-50/20 hover:bg-red-50/40'">
+                                <td class="px-6 py-4 align-top">
+                                    <span class="px-2.5 py-1 rounded-full text-[10px] font-bold border"
+                                          :class="row.score === 5 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-red-100 text-red-700 border-red-200'"
+                                          x-text="row.score === 5 ? 'PASS' : 'FAIL'"></span>
+                                </td>
+                                <td class="px-6 py-4 align-top">
+                                    <span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200" x-text="row.category || 'General'"></span>
+                                </td>
+                                <td class="px-6 py-4 align-top">
+                                    <div class="font-medium text-slate-800 text-sm leading-relaxed" x-text="row.question"></div>
+                                </td>
+                                <td class="px-6 py-4 align-top text-slate-600 font-medium text-sm" x-text="row.reason"></td>
+                                <td class="px-6 py-4 align-top text-right">
+                                    <button @click="openModal(row)" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:underline">View</button>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
                 </table>
             </div>
         </div>
@@ -85,167 +112,163 @@
                         <th class="px-6 py-3 border-b border-gray-200 text-center">Tests</th>
                         <th class="px-6 py-3 border-b border-gray-200 text-center">Passed</th>
                         <th class="px-6 py-3 border-b border-gray-200 text-right">Score</th>
+                        <th class="px-6 py-3 border-b border-gray-200 text-right">Action</th>
                     </tr>
                 </thead>
-                <tbody id="history-table" class="divide-y divide-gray-100 text-sm">
-                    <tr><td colspan="4" class="px-6 py-4 text-center text-slate-400 italic">Loading history...</td></tr>
+                <tbody class="divide-y divide-gray-100 text-sm">
+                    <template x-if="history.length === 0">
+                        <tr><td colspan="5" class="px-6 py-4 text-center text-slate-400 italic">No previous runs found.</td></tr>
+                    </template>
+                    <template x-for="run in history" :key="run.id">
+                        <tr class="hover:bg-slate-50 transition-colors group">
+                            <td class="px-6 py-3 font-mono text-xs text-slate-600" x-text="new Date(run.timestamp).toLocaleString()"></td>
+                            <td class="px-6 py-3 text-center text-slate-700" x-text="run.total"></td>
+                            <td class="px-6 py-3 text-center text-slate-700" x-text="run.passed"></td>
+                            <td class="px-6 py-3 text-right font-bold" 
+                                :class="parseFloat(run.accuracy) >= 90 ? 'text-emerald-600' : 'text-red-600'"
+                                x-text="run.accuracy"></td>
+                            <td class="px-6 py-3 text-right">
+                                <button @click="loadPastRun(run.id)" class="text-xs bg-white border border-gray-300 text-gray-700 px-3 py-1 rounded hover:bg-gray-50 shadow-sm transition-all group-hover:border-indigo-300 group-hover:text-indigo-600">
+                                    Load Report
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
                 </tbody>
             </table>
         </div>
     </div>
+
+    <div x-show="showModal" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-900 bg-opacity-50 transition-opacity" @click="showModal = false"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div class="inline-block align-bottom bg-white rounded-xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+                <div class="bg-white px-6 pt-6 pb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Test Details</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase">Question</label>
+                            <div class="mt-1 text-sm text-gray-900 bg-gray-50 p-3 rounded border" x-text="activeRow.question"></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase">Generated SQL</label>
+                            <pre class="mt-1 text-xs text-blue-400 bg-slate-900 p-3 rounded overflow-x-auto font-mono whitespace-pre-wrap" x-text="activeRow.sql"></pre>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 uppercase">Reasoning</label>
+                            <div class="mt-1 text-sm p-3 rounded border" 
+                                 :class="activeRow.score === 5 ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-red-50 text-red-800 border-red-100'"
+                                 x-text="activeRow.reason"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-6 py-4 flex flex-row-reverse">
+                    <button type="button" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 sm:ml-3 sm:w-auto" @click="showModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
-    // 1. History Loader (Runs immediately on load)
-    document.addEventListener('DOMContentLoaded', loadHistory);
+    function qaDashboard() {
+        return {
+            testCount: '5',
+            isLoading: false,
+            progress: 0,
+            report: null, // { accuracy, passed, failed, details: [] }
+            history: [],
+            showModal: false,
+            activeRow: {},
 
-    async function loadHistory() {
-        try {
-            const res = await fetch('/api/admin/qa/history', {
-                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
-            });
-            if (!res.ok) throw new Error("API Error");
-            const data = await res.json();
-            const tbody = document.getElementById('history-table');
-            
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-slate-400">No previous runs found.</td></tr>';
-                return;
+            init() {
+                this.loadHistory();
+            },
+
+            async loadHistory() {
+                try {
+                    const res = await fetch('/api/admin/qa/history', {
+                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+                    });
+                    this.history = await res.json();
+                } catch (e) { console.error(e); }
+            },
+
+            async loadPastRun(runId) {
+                // Scroll to top
+                document.querySelector('.overflow-y-auto').scrollTo({ top: 0, behavior: 'smooth' });
+                
+                // Fetch specific run details
+                try {
+                    const res = await fetch(`/api/admin/qa/history/${runId}`, {
+                        headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+                    });
+                    if(!res.ok) throw new Error("Failed to load run");
+                    
+                    const data = await res.json();
+                    
+                    // Manually calculate failed count if missing
+                    if (data.failed === undefined) data.failed = data.total - data.passed;
+                    
+                    this.report = data;
+                } catch(e) {
+                    alert("Error loading run: " + e.message);
+                }
+            },
+
+            async runNewTests() {
+                this.isLoading = true;
+                this.progress = 0;
+                this.report = null;
+                
+                // Fake progress
+                const interval = setInterval(() => {
+                    if (this.progress < 95) this.progress += 2;
+                }, 500);
+
+                try {
+                    const res = await fetch('/api/admin/qa/run', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            'Authorization': 'Bearer ' + localStorage.getItem('access_token') 
+                        },
+                        body: JSON.stringify({ count: parseInt(this.testCount) })
+                    });
+
+                    // Safe JSON Parse
+                    const rawText = await res.text();
+                    let data;
+                    try { data = JSON.parse(rawText); } catch(e) { throw new Error("Server Error: " + rawText.substring(0, 100)); }
+
+                    if (!res.ok) throw new Error(data.detail || "Error running tests");
+
+                    clearInterval(interval);
+                    this.progress = 100;
+                    
+                    setTimeout(() => {
+                        this.report = data;
+                        this.isLoading = false;
+                        this.loadHistory(); // Refresh history table
+                    }, 500);
+
+                } catch (e) {
+                    alert("Test Failed: " + e.message);
+                    clearInterval(interval);
+                    this.isLoading = false;
+                }
+            },
+
+            openModal(row) {
+                this.activeRow = row;
+                this.showModal = true;
             }
-
-            tbody.innerHTML = data.map(run => {
-                const score = parseFloat(run.accuracy.replace('%', ''));
-                const colorClass = score >= 90 ? 'text-emerald-600' : (score >= 70 ? 'text-yellow-600' : 'text-red-600');
-                const date = new Date(run.timestamp).toLocaleString();
-                return `<tr class="hover:bg-slate-50 transition-colors">
-                    <td class="px-6 py-3 font-mono text-xs text-slate-600">${date}</td>
-                    <td class="px-6 py-3 text-center text-slate-700">${run.total}</td>
-                    <td class="px-6 py-3 text-center text-slate-700">${run.passed}</td>
-                    <td class="px-6 py-3 text-right font-bold ${colorClass}">${run.accuracy}</td>
-                </tr>`;
-            }).join('');
-        } catch (e) {
-            console.error("History Error:", e);
-            document.getElementById('history-table').innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-400">Failed to load history.</td></tr>';
         }
-    }
-
-    // 2. Test Runner (Global Function)
-    window.runTests = async function() {
-        const btn = document.getElementById('run-btn');
-        const count = document.getElementById('test-count').value;
-        const progress = document.getElementById('progress-container');
-        const bar = document.getElementById('progress-bar');
-        const progressText = document.getElementById('progress-text');
-        
-        // Reset UI State
-        btn.disabled = true; 
-        btn.classList.add('opacity-75', 'cursor-not-allowed');
-        progress.classList.remove('hidden');
-        document.getElementById('report-container').classList.add('hidden');
-        bar.style.width = "0%";
-        progressText.innerText = "0%";
-        
-        // Animated Progress Bar (Visual only, backend is single await)
-        let w = 0;
-        const interval = setInterval(() => { 
-            if(w < 95) { 
-                w += 2; 
-                bar.style.width = w + "%"; 
-                progressText.innerText = Math.round(w) + "%";
-            } 
-        }, 500);
-
-        try {
-            const res = await fetch('/api/admin/qa/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('access_token') },
-                body: JSON.stringify({ count: parseInt(count) })
-            });
-            
-            // Safe JSON Parse logic
-            const rawText = await res.text();
-            let data;
-            try { 
-                data = JSON.parse(rawText); 
-            } catch(e) { 
-                throw new Error("Server Error (HTML Response): " + rawText.substring(0, 100).replace(/<[^>]*>?/gm, '')); 
-            }
-
-            if (!res.ok) throw new Error(data.detail || "Error running tests");
-
-            // Success
-            clearInterval(interval); 
-            bar.style.width = "100%";
-            progressText.innerText = "100%";
-            
-            // Delay slightly to show 100% before showing report
-            setTimeout(() => {
-                renderReport(data);
-                progress.classList.add('hidden'); // Hide progress bar on success
-                loadHistory(); // Refresh history table
-            }, 600);
-            
-        } catch (e) {
-            alert("Test Failed: " + e.message);
-            clearInterval(interval);
-            progress.classList.add('hidden'); // Hide progress bar on failure
-        } finally {
-            btn.disabled = false; 
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
-        }
-    };
-
-    function renderReport(data) {
-        const container = document.getElementById('report-container');
-        container.classList.remove('hidden');
-        
-        // Trigger reflow for animation
-        void container.offsetWidth; 
-        container.classList.add('fade-in-up');
-
-        const acc = Math.round((data.passed / data.total) * 100);
-        const accEl = document.getElementById('score-accuracy');
-        accEl.innerText = isNaN(acc) ? "0%" : acc + "%";
-        accEl.className = `text-4xl font-black mt-2 ${acc >= 90 ? 'text-emerald-500' : 'text-red-500'}`;
-        
-        document.getElementById('score-passed').innerText = data.passed;
-        document.getElementById('score-failed').innerText = data.failed;
-
-        const tbody = document.getElementById('results-table');
-        tbody.innerHTML = '';
-        
-        data.details.forEach(row => {
-            const isPass = row.score === 5;
-            const badge = isPass 
-                ? '<span class="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold border border-emerald-200">PASS</span>'
-                : '<span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-bold border border-red-200">FAIL</span>';
-            
-            const tr = document.createElement('tr');
-            tr.className = isPass ? "bg-white hover:bg-slate-50 transition-colors" : "bg-red-50/20 hover:bg-red-50/40 transition-colors";
-            
-            // RENDERS 4 COLUMNS NOW (Matches Header)
-            tr.innerHTML = `
-                <td class="px-6 py-4 align-top">${badge}</td>
-                <td class="px-6 py-4 align-top">
-                    <span class="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
-                        ${row.category || 'General'}
-                    </span>
-                </td>
-                <td class="px-6 py-4 align-top">
-                    <div class="font-medium text-slate-800 text-sm leading-relaxed">"${row.question}"</div>
-                    <div class="mt-2 text-[10px] font-mono text-slate-400 truncate max-w-xs p-1 bg-slate-50 rounded border border-slate-100">
-                        ${row.sql}
-                    </div>
-                </td>
-                <td class="px-6 py-4 align-top text-slate-600 font-medium text-sm">
-                    ${row.failure_reason}
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
     }
 </script>
 {% endblock %}

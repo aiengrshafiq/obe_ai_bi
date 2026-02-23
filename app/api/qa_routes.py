@@ -28,3 +28,17 @@ async def get_qa_history():
         return QAService.get_history()
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
+
+
+@router.get("/history/{run_id}")
+async def get_run_details(run_id: str):
+    """
+    Fetches details for a specific past run.
+    """
+    try:
+        data = QAService.get_run_details(run_id)
+        if not data:
+            raise HTTPException(status_code=404, detail="Run not found")
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
