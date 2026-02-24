@@ -90,20 +90,24 @@ class QAService:
         STRICT GRADING RUBRIC:
         1. **Templating is VALID & REQUIRED:** - The SQL MUST use Python placeholders like `{{latest_ds}}`, `{{start_30d_dash}}`, etc.
            - **DO NOT** fail the test because of curly braces `{{...}}`. They are correct.
+            **Templating vs SQL Math:** - Python placeholders like `{{latest_ds}}` are PREFERRED.
+           - **HOWEVER:** If a specific timeframe (e.g. "15 days") is not in the variables, standard SQL date logic (Subqueries, `TO_CHAR`, `DATE_ADD`) is **ALLOWED**. Do NOT fail valid SQL just because it uses date math.
            
         2. **Partitioning Rules (Based on KIND):**
            - **If KIND = 'df' (Snapshot):** MUST filter `ds = '{{latest_ds}}'` (unless querying specific history).
-                - **EXCEPTION:** Calculating trends on static columns (like `registration_date`,`registration_date_only`, `created_at`) inside the latest snapshot is **CORRECT**. Do NOT demand a `ds` range filter for fixed attributes.
+                - **CRITICAL EXCEPTION 1:** If calculating a trend based on a **static date column** (like `registration_date`,`registration_date_only`, `created_at`, `first_deposit_date`) inside the Snapshot, it is **CORRECT** to use `ds = '{{latest_ds}}'`. Do NOT demand a `ds` range filter for these attributes.
+                - **CRITICAL EXCEPTION 2 (Metric Trends):** If user asks for "Trend" of a snapshot metric (e.g. "Daily Active Traders", "Balance History"), querying a **range of partitions** (`ds >= ...`) is **CORRECT**.
            - **If KIND = 'di' (Incremental):** MUST have a `ds` range filter (e.g., `BETWEEN`, `>=`).
            - **Exception:** `risk_campaign_blacklist` has no `ds` column.
+           
        
         3. **Risk vs. Blacklist (CRITICAL CONTEXT RULE):**
            - **Explicit Ban:** Only if user asks for "Banned", "Blocked", or "Blacklisted", MUST use `risk_campaign_blacklist`.
            - **Attribute-Based Risk:** If the user **defines** "High Risk" using profile attributes (e.g., "High risk users who are not KYC verified", "High volume users", "Bad Users"), you **MUST** use `user_profile_360`.
            - **Reasoning:** A user can be "High Risk" (Behavioral) without being "Banned" (Blacklisted). Do NOT fail the test just because the word "Risk" appears.
 
-        4. **Join Logic:** - If a Snapshot table contains a pre-calculated metric (e.g., `total_trade_volume`), the SQL must USE IT.
-           - It must **NOT** join the incremental trades table to calculate it manually.
+        4. **Join & Source Logic:** - **Lifetime/Total Stats:** If user asks for "Total", "Lifetime", or "Current Balance", you **MUST** use the Snapshot (`_df`). Do NOT sum the incremental table.
+           - **Daily/Period Stats:** If user asks for "Yesterday", "Daily", or "Last 7 Days", querying the Incremental table (`_di`) is **CORRECT** and preferred. Do NOT suggest diffing two snapshots.
         
         OUTPUT JSON:
         {{
@@ -138,7 +142,9 @@ class QAService:
             start_time = datetime.now()
             try:
                 # Generate SQL using the real App Pipeline
-                sql = await vn.generate_sql_async(question=q)
+                #sql = await vn.generate_sql_async(question=q)
+                # NEW (Add the flag)
+                sql = await vn.generate_sql_async(question=q, allow_llm_to_see_data=True)
                 
                 # Judge the result
                 verdict = QAService.evaluate_sql(q, sql)
