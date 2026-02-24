@@ -79,23 +79,36 @@ class QAService:
         """
         schema = QAService._get_schema_context()
         prompt = f"""
-        You are a Senior SQL Code Reviewer. 
-        Question: "{question}"
-        Generated SQL: {sql}
+        You are a Senior SQL Code Reviewer for a Python-based BI Tool.
         
-        SCHEMA CONTEXT:
+        USER QUESTION: "{question}"
+        GENERATED SQL: {sql}
+        
+        SCHEMA CONTEXT (Pay attention to KIND: 'df' vs 'di'):
         {schema}
         
-        STRICT RUBRIC (Fail if ANY are violated):
-        1. **Date Math:** Must use `BETWEEN` or specific dates for "Last Month". No `INTERVAL` math.
-        2. **Snapshot Join:** If querying 'Total Volume' from a Snapshot, it MUST NOT join the Incremental Trades table.
-        3. **Snapshot Partition:** Must use `ds = '{{latest_ds}}'` (UNLESS the table is 'risk_campaign_blacklist', which has no ds).
-        4. **Trend Limit:** If Grouping by Date (Trend), there must be NO `LIMIT` clause.
+        STRICT GRADING RUBRIC:
+        1. **Templating is VALID & REQUIRED:** - The SQL MUST use Python placeholders like `{{latest_ds}}`, `{{start_30d_dash}}`, etc.
+           - **DO NOT** fail the test because of curly braces `{{...}}`. They are correct.
+           
+        2. **Partitioning Rules (Based on KIND):**
+           - **If KIND = 'df' (Snapshot):** MUST filter `ds = '{{latest_ds}}'` (unless querying specific history).
+                - **EXCEPTION:** Calculating trends on static columns (like `registration_date`,`registration_date_only`, `created_at`) inside the latest snapshot is **CORRECT**. Do NOT demand a `ds` range filter for fixed attributes.
+           - **If KIND = 'di' (Incremental):** MUST have a `ds` range filter (e.g., `BETWEEN`, `>=`).
+           - **Exception:** `risk_campaign_blacklist` has no `ds` column.
+       
+        3. **Risk vs. Blacklist (CRITICAL CONTEXT RULE):**
+           - **Explicit Ban:** Only if user asks for "Banned", "Blocked", or "Blacklisted", MUST use `risk_campaign_blacklist`.
+           - **Attribute-Based Risk:** If the user **defines** "High Risk" using profile attributes (e.g., "High risk users who are not KYC verified", "High volume users", "Bad Users"), you **MUST** use `user_profile_360`.
+           - **Reasoning:** A user can be "High Risk" (Behavioral) without being "Banned" (Blacklisted). Do NOT fail the test just because the word "Risk" appears.
+
+        4. **Join Logic:** - If a Snapshot table contains a pre-calculated metric (e.g., `total_trade_volume`), the SQL must USE IT.
+           - It must **NOT** join the incremental trades table to calculate it manually.
         
         OUTPUT JSON:
         {{
             "score": 1 (Fail) or 5 (Pass),
-            "reason": "Brief explanation",
+            "reason": "Brief explanation of failure (or 'LGTM' if pass)",
             "category": "Date" | "Join" | "Syntax" | "Logic"
         }}
         """
@@ -109,6 +122,8 @@ class QAService:
             return json.loads(response.choices[0].message.content.replace("```json", "").replace("```", ""))
         except:
             return {"score": 0, "reason": "Judge Crashed", "category": "System"}
+
+
 
     @staticmethod
     async def run_suite(count=5):
