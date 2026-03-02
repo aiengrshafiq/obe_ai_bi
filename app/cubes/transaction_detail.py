@@ -40,33 +40,25 @@ CREATE TABLE public.dws_user_deposit_withdraw_detail_di (
 """
 
 # 2. Documentation
+# 2. Documentation
 DOCS = """
 **Table Purpose:**
 Transaction-level log of all money entering or leaving the platform.
 - **Granularity:** One row per transaction.
-- **Key Columns:** `type` ('deposit'/'withdraw'), `coin`, `real_amount`.
+- **Key Columns:** `type` ('deposit'/'withdraw'), `coin`, `real_amount`, `chain`.
 
-**Critical Logic:**
-1. **Net Deposit:** Calculated as `SUM(deposit real_amount) - SUM(withdraw real_amount)`.
-2. **Discrepancy:** If `amount` != `real_amount`, there might be a blockchain fee or error.
-3. **Partition:** Always filter by `ds = '{latest_ds}'` for daily analysis.
+** ⚡ AGGREGATION WARNING (CRITICAL):**
+- **DO NOT** use this table to calculate "Total Lifetime Deposits", "Net Deposits", or "Withdrawal Ratios". 
+- Those metrics are pre-calculated in `user_profile_360` (e.g., `total_deposit_volume`, `net_deposit_amount`).
+- **Use this table ONLY for:** Raw transaction lists, querying specific coins/chains (e.g., "USDT TRC20 deposits"), or specific time-window aggregates (e.g., "Deposits last 7 days").
+
+**Partitioning Rule (`_di` table):**
+- `ds = '{latest_ds}'` ONLY gives you transactions that happened on that exact day.
+- To get history, you MUST use `ds BETWEEN '{start_7d}' AND '{latest_ds}'` or similar range filters.
 """
 
 # 3. Training Examples (Dynamic Date)
 EXAMPLES = [
-    {
-        "question": "Show total deposits and withdrawals per user.",
-        "sql": """
-        SELECT user_code,
-               SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END) AS total_deposit,
-               SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END) AS total_withdraw,
-               COUNT(*) AS transaction_count
-        FROM public.dws_user_deposit_withdraw_detail_di
-        WHERE ds = '{latest_ds}'
-        GROUP BY user_code
-        ORDER BY total_deposit DESC;
-        """
-    },
     {
         "question": "Analyze fees per coin for withdrawals.",
         "sql": """
@@ -84,19 +76,6 @@ EXAMPLES = [
         "sql": "SELECT * FROM public.dws_user_deposit_withdraw_detail_di WHERE ds = '{latest_ds}' AND (amount > 10000 OR amount < 0.01) ORDER BY amount DESC;"
     },
     {
-        "question": "Show the deposit vs withdrawal ratio per user.",
-        "sql": """
-        SELECT user_code,
-               CASE WHEN SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END) = 0 THEN NULL
-                    ELSE SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END) / SUM(CASE WHEN type = 'withdraw' THEN amount ELSE 0 END)
-               END AS deposit_withdraw_ratio
-        FROM public.dws_user_deposit_withdraw_detail_di
-        WHERE ds = '{latest_ds}'
-        GROUP BY user_code
-        ORDER BY deposit_withdraw_ratio DESC;
-        """
-    },
-    {
         "question": "List wallets with multiple transactions on the same chain.",
         "sql": """
         SELECT chain, wallet_address, COUNT(*) AS tx_count, SUM(amount) AS total_amount
@@ -108,7 +87,8 @@ EXAMPLES = [
         """
     },
     {
-        "question": "Show discrepancies where real amount matches requested amount.",
+        # Changed "matches" to "does not match"
+        "question": "Show discrepancies where real amount does not match requested amount.",
         "sql": """
         SELECT user_code, type, amount, real_amount, (amount - real_amount) AS discrepancy
         FROM public.dws_user_deposit_withdraw_detail_di
@@ -116,16 +96,27 @@ EXAMPLES = [
         ORDER BY discrepancy DESC;
         """
     },
+    # ADD THESE TO THE EXAMPLES LIST
     {
-        "question": "Top users by net deposit including bonuses.",
+        "question": "Show all USDT deposits on the TRC20 chain for the last 7 days.",
         "sql": """
-        SELECT user_code,
-               SUM(CASE WHEN type = 'deposit' THEN real_amount ELSE 0 END) - SUM(CASE WHEN type = 'withdraw' THEN real_amount ELSE 0 END) AS net_deposit,
-               SUM(CASE WHEN is_bonus = 1 THEN real_amount ELSE 0 END) AS bonus_received
-        FROM public.dws_user_deposit_withdraw_detail_di
-        WHERE ds = '{latest_ds}'
-        GROUP BY user_code
-        ORDER BY net_deposit DESC;
+        SELECT user_code, transaction_id, real_amount, create_at 
+        FROM public.dws_user_deposit_withdraw_detail_di 
+        WHERE ds >= '{start_7d}' 
+          AND type = 'deposit' 
+          AND coin = 'USDT' 
+          AND chain = 'TRC20'
+        ORDER BY create_at DESC;
+        """
+    },
+    {
+        "question": "What was the total withdrawal fee collected yesterday?",
+        "sql": """
+        SELECT coin, SUM(fee_amount) as total_fees_yesterday
+        FROM public.dws_user_deposit_withdraw_detail_di 
+        WHERE ds = '{latest_ds}' 
+          AND type = 'withdraw'
+        GROUP BY coin;
         """
     }
 ]
