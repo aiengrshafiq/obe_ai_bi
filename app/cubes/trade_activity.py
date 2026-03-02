@@ -37,7 +37,16 @@ CREATE TABLE public.dws_all_trades_di (
 # 2. Documentation (Business Logic)
 DOCS = """
 **Table Purpose:**
-Records every trade execution. Key source for Volume, Revenue, and User Behavior.
+Records every trade execution. Key source for Daily Volume, Trade Duration, and Symbol-level behavior.
+
+** ⚡ AGGREGATION WARNING (CRITICAL):**
+- **DO NOT** use this table to calculate "Lifetime Trading Volume", "Total Fees", or "All-Time Top Traders". 
+- Those lifetime metrics are pre-calculated in `user_profile_360` (e.g., `total_trade_volume`, `total_net_fees`, `futures_trade_volume`).
+- **Use this table ONLY for:** Specific time-window aggregates (e.g., "Volume last 7 days"), symbol-specific queries (e.g., "BTC/USDT volume"), or trade-level metrics (e.g., duration, leverage).
+
+**Partitioning Rule (`_di` table):**
+- `ds = '{latest_ds}'` ONLY gives you trades executed exactly on that day (yesterday).
+- To get history/trends, you MUST use `ds BETWEEN '{start_7d}' AND '{latest_ds}'` or similar range filters.
 
 **Critical Data Types & Rules:**
 1. **Status Filtering:** ALWAYS use `_desc` columns. 
@@ -48,12 +57,7 @@ Records every trade execution. Key source for Volume, Revenue, and User Behavior
 3. **Calculations:**
    - **Buy Volume:** Sum `deal_amount` where `order_side_desc = 'buy'`.
    - **Sell Volume:** Sum `deal_amount` where `order_side_desc = 'sell'`.
-   - **Trade Duration:** Use `duration_seconds` to find outliers or average hold time.
-4. **Time Analysis:** Use `EXTRACT(HOUR FROM trade_datetime)` for hourly analysis.
-5. **User Code is a STRING:** ALWAYS wrap `user_code` in single quotes.
-   - CORRRCT: `WHERE user_code = '10034920'`
-   - WRONG: `WHERE user_code = 10034920` (This will fail).
-6. **Partition:** Always filter by `ds = '{latest_ds}'` unless analyzing history.
+4. **User Code is a STRING:** ALWAYS wrap `user_code` in single quotes (`WHERE user_code = '10034920'`).
 """
 
 # 3. Training Examples (BI Team's Complex Queries - Adapted)
@@ -84,7 +88,7 @@ EXAMPLES = [
         """
     },
     {
-        "question": "What is the cancellation ratio per user?",
+        "question": "What was the cancellation ratio per user yesterday?",
         "sql": """
         SELECT user_code,
                ROUND(
@@ -123,7 +127,17 @@ EXAMPLES = [
         """
     },
     {
-        "question": "Top 10 users by fee contribution.",
+        "question": "Top 10 users by fee contribution yesterday.",
         "sql": "SELECT user_code, SUM(net_fee) AS total_fee, COUNT(order_id) AS trades_count FROM public.dws_all_trades_di WHERE ds = '{latest_ds}' GROUP BY user_code ORDER BY total_fee DESC LIMIT 10;"
+    },
+    {
+        "question": "Show the daily trading volume trend for BTC/USDT over the last 7 days.",
+        "sql": """
+        SELECT ds as trade_date, SUM(deal_amount) as daily_volume
+        FROM public.dws_all_trades_di
+        WHERE ds >= '{start_7d}' AND alias = 'BTC/USDT'
+        GROUP BY ds
+        ORDER BY ds ASC;
+        """
     }
 ]
