@@ -33,6 +33,7 @@ CREATE TABLE public.dwd_login_history_log_di (
 );
 """
 
+
 # 2. Documentation
 DOCS = """
 **Table Purpose:**
@@ -41,8 +42,11 @@ Tracks security events (Logins/Logouts). Use for analyzing user geography, devic
 **Critical Rules:**
 1. **Event Type:** Filter by `type = 'LOGIN'` to count actual user sessions.
 2. **Granularity:** One row per event.
-3. **Partition:** Always filter by `ds = '{latest_ds}'` for daily analysis.
-4. **User Code:** Treat `user_code` as a String in WHERE clauses (e.g. `user_code = '123'`).
+3. **User Code:** Treat `user_code` as a String in WHERE clauses (e.g. `user_code = '123'`).
+
+**Partitioning Rule (`_di` table):**
+- **The Default:** If the user does NOT specify a timeframe, ALWAYS default to `ds = '{latest_ds}'` (this represents the latest available data).
+- **Historical Analysis:** Only if the user explicitly asks for a history, trend, or specific date range, use `ds >= '{start_7d}'` or `ds BETWEEN '{start_30d}' AND '{latest_ds}'`.
 """
 
 # 3. Training Examples (Dynamic Date)
@@ -99,6 +103,18 @@ EXAMPLES = [
         WHERE ds = '{latest_ds}'
         GROUP BY 1
         ORDER BY hour ASC;
+        """
+    },
+    {
+        "question": "Show the number of logins per IP for user 10000047 over the last 30 days.",
+        "sql": """
+        SELECT ip, location, COUNT(*) AS login_count
+        FROM public.dwd_login_history_log_di
+        WHERE user_code = '10000047' 
+          AND ds >= '{start_30d}' 
+          AND type = 'LOGIN'
+        GROUP BY ip, location
+        ORDER BY login_count DESC;
         """
     }
 ]

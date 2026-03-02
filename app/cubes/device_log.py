@@ -67,7 +67,9 @@ Used for fraud detection, finding multiple accounts on one device, and checking 
    - If a user asks for "fingerprint" or "device ID", query `visitor_id`.
    - "Shared Fingerprint" means multiple `user_code`s associated with the same `visitor_id`.
 2. **Risk Analysis:** Use `is_vpn=1` or `is_proxy=1` to find suspicious traffic.
-3. **Partition:** Always filter by `ds = '{latest_ds}'`.
+3. **Partitioning Rule (`_di` table):**
+   - For daily checks (e.g., "Registrations yesterday"), use `ds = '{latest_ds}'`.
+   - For historical checks (e.g., "Users who used a VPN in the last 7 days"), you MUST use a range filter like `ds >= '{start_7d}'`.
 """
 
 # 3. Training Examples (Dynamic Date)

@@ -46,6 +46,7 @@ Tracks how users earn and spend points.
 4. **Time Trends:** For "Daily Generated" or "Daily Consumed", group by `ds`.
 5. **Partitioning Rule (CRITICAL for `_di` table):** - You MUST NEVER query this table without a `ds` filter.
    - For "Yesterday" or "Daily" stats, use `ds = '{latest_ds}'`.
+   - **The Default:** If the user does NOT specify a timeframe, ALWAYS default to `ds = '{latest_ds}'` (this represents the latest available data).
    - For "Total", "Lifetime", "Trend", or "Distribution" over time, you MUST use a range like `ds >= '{start_30d}'` or `ds BETWEEN '{start_30d}' AND '{latest_ds}'`.
 """
 
@@ -78,7 +79,7 @@ EXAMPLES = [
     },
     {
         # Added "yesterday" to match the ds = '{latest_ds}' logic
-        "question": "What were the most profitable activities yesterday?",
+        "question": "What were the most profitable activities?",
         "sql": """
         SELECT rule_code, SUM(earned_points) as total_generated 
         FROM public.dwd_activity_t_points_user_task_di 

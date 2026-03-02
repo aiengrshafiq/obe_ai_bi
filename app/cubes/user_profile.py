@@ -99,6 +99,7 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 
 **Critical SQL Rules:**
 1. **The 'Yesterday' Rule (Partitioning):** - You MUST filter by `ds = '{latest_ds}'` for ANY question about "current" status (e.g., "total users", "current balance").
+   - **The Default:** If the user does NOT specify a timeframe, ALWAYS default to `ds = '{latest_ds}'` (this represents the latest available data).
    - Do NOT scan all partitions unless the user explicitly asks for "History" or "Trend".
 
 **Column Definitions:**
@@ -141,7 +142,7 @@ EXAMPLES = [
         "sql": "SELECT kyc_status_desc, COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' GROUP BY kyc_status_desc;"
     },
     {
-        "question": "How many new registrations (NRU) did we have yesterday?",
+        "question": "How many new registrations (NRU) did we have?",
         "sql": "SELECT COUNT(user_code) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND registration_date_only = '{latest_ds_dash}';"
     },
     {
