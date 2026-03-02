@@ -44,12 +44,16 @@ Tracks how users earn and spend points.
 3. **User Ranges (Distribution):** When asked for "User Point Distribution", group users by total points into these exact buckets:
    - '0-199', '200-499', '500-999', '1000-1999', '2000-4999', '5000-9999', '10000+'
 4. **Time Trends:** For "Daily Generated" or "Daily Consumed", group by `ds`.
+5. **Partitioning Rule (CRITICAL for `_di` table):** - You MUST NEVER query this table without a `ds` filter.
+   - For "Yesterday" or "Daily" stats, use `ds = '{latest_ds}'`.
+   - For "Total", "Lifetime", "Trend", or "Distribution" over time, you MUST use a range like `ds >= '{start_30d}'` or `ds BETWEEN '{start_30d}' AND '{latest_ds}'`.
 """
 
 # 3. Training Examples (The Complex Queries)
+# REPLACE YOUR EXAMPLES LIST WITH THIS ONE
 EXAMPLES = [
     {
-        "question": "Show the distribution of users by total points holding.",
+        "question": "Show the distribution of users by total points holding over the last 30 days.",
         "sql": """
         SELECT 
             CASE 
@@ -65,7 +69,7 @@ EXAMPLES = [
         FROM (
             SELECT user_code, SUM(earned_points) as total_p 
             FROM public.dwd_activity_t_points_user_task_di 
-            WHERE state = 'COMPLETED' 
+            WHERE state = 'COMPLETED' AND ds >= '{start_30d}'
             GROUP BY user_code
         ) t
         GROUP BY 1
@@ -73,7 +77,8 @@ EXAMPLES = [
         """
     },
     {
-        "question": "What are the most profitable activities (total generated points)?",
+        # Added "yesterday" to match the ds = '{latest_ds}' logic
+        "question": "What were the most profitable activities yesterday?",
         "sql": """
         SELECT rule_code, SUM(earned_points) as total_generated 
         FROM public.dwd_activity_t_points_user_task_di 
@@ -83,21 +88,25 @@ EXAMPLES = [
         """
     },
     {
-        "question": "Show daily generated points trend broken down by activity.",
+        # Added a strict date boundary
+        "question": "Show daily generated points trend broken down by activity for the last 30 days.",
         "sql": """
         SELECT ds, rule_code, SUM(earned_points) as daily_points
         FROM public.dwd_activity_t_points_user_task_di
-        WHERE state = 'COMPLETED'
+        WHERE state = 'COMPLETED' AND ds >= '{start_30d}'
         GROUP BY ds, rule_code
         ORDER BY ds ASC;
         """
     },
     {
-        "question": "List top 10 users by points earned from Daily Check-ins.",
+        # Added a strict date boundary
+        "question": "List top 10 users by points earned from Daily Check-ins over the last 30 days.",
         "sql": """
         SELECT user_code, SUM(earned_points) as checkin_points
         FROM public.dwd_activity_t_points_user_task_di
-        WHERE rule_code = 'DAILY_CHECK-IN' AND state = 'COMPLETED'
+        WHERE rule_code = 'DAILY_CHECK-IN' 
+          AND state = 'COMPLETED'
+          AND ds >= '{start_30d}'
         GROUP BY user_code
         ORDER BY checkin_points DESC
         LIMIT 10;
