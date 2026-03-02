@@ -8,41 +8,77 @@ TIME_COLUMN = "registration_date_only"
 KIND = "df"
 # 2. DDL (The Structure)
 # Note: Copied exactly from your validated schema.
+# 1. Update this block in app/cubes/user_profile.py
 DDL = """
 CREATE TABLE public.user_profile_360 (
-    -- IDENTITY
-    user_code BIGINT,           -- Unique User ID
-    email TEXT,
-    country TEXT,
+    -- IDENTITY & LOCATION
+    user_code BIGINT, email TEXT, country TEXT, city TEXT,
+    parent_code BIGINT, inviter_user_code BIGINT, root_user_code BIGINT,
     
-    -- DATES
-    registration_date TIMESTAMPTZ,
-    registration_date_only DATE, -- Use for daily registration counts (NRU)
-    first_deposit_date TIMESTAMPTZ, -- FTD Date. If NOT NULL, user is a depositor.
+    -- DATES & LIFECYCLE
+    registration_date TIMESTAMPTZ, registration_date_only DATE, days_since_registration BIGINT,
+    first_login_date TIMESTAMPTZ, last_login_date TIMESTAMPTZ, days_since_last_login BIGINT,
+    lifecycle_stage TEXT, user_segment TEXT, trading_profile TEXT,
     
-    -- STATUS FLAGS (1=Yes, 0=No)
-    is_active_user_7d BIGINT,   -- Logged in last 7 days
-    is_active_trader_7d BIGINT, -- Traded last 7 days
-    is_good_user BIGINT,        -- Low risk
-    kyc_status_desc TEXT,       -- e.g. 'Basic', 'Advanced'
+    -- KYC & COMPLIANCE
+    kyc_status BIGINT, kyc_status_desc TEXT, kyc_audit_status BIGINT, 
+    kyc_audit_status_desc TEXT, kyc_audit_date TIMESTAMPTZ,
     
-    -- SEGMENTS
-    user_segment TEXT,          -- 'VIP', 'High Value', 'Medium Value', 'Low Value'
-    lifecycle_stage TEXT,       -- 'Acquisition', 'Active', 'Churned'
+    -- RISK & DEVICE (Fraud Detection)
+    is_active BIGINT, withdraw_enabled BIGINT, fund_enabled BIGINT,
+    last_device_model TEXT, last_os TEXT, last_browser TEXT,
+    first_device_model TEXT, first_os TEXT, first_browser TEXT,
+    has_used_vpn BIGINT, has_used_proxy BIGINT, has_bot_detected BIGINT, 
+    has_emulator_detected BIGINT, has_rooted_device BIGINT, has_browser_tampering BIGINT, 
+    max_risk_score DOUBLE, is_good_user BIGINT,
     
-    -- LIFETIME METRICS (Accumulated totals as of 'ds')
-    total_trade_volume DECIMAL,    -- All-time Volume
-    total_deposit_volume DECIMAL,  -- All-time Deposit
-    total_withdraw_volume DECIMAL, -- All-time Withdrawals
-    total_net_fees DECIMAL,        -- All-time Revenue
-    total_wallet_balance DECIMAL,  -- Current Balance (Available + Frozen)
+    -- DEPOSITS & WITHDRAWALS
+    first_deposit_date TIMESTAMPTZ, first_deposit_amount DOUBLE, first_deposit_coin TEXT,
+    days_to_first_deposit BIGINT, has_ftd BIGINT, is_eftd BIGINT, eftd_date TIMESTAMPTZ, eftd_amount DOUBLE,
+    lifetime_deposit_count BIGINT, lifetime_deposit_amount DOUBLE, last_deposit_date TIMESTAMPTZ,
+    last_deposit_datetime TIMESTAMPTZ, days_since_last_deposit BIGINT,
+    total_deposit_volume DOUBLE, total_deposit_txns BIGINT, total_withdraw_volume DOUBLE, 
+    total_withdraw_txns BIGINT, total_withdraw_fees DOUBLE, net_deposit_amount DOUBLE, 
+    crypto_deposit_volume DOUBLE, crypto_withdraw_volume DOUBLE, net_deposit_ratio DOUBLE,
+    total_withdraw_attempts BIGINT, successful_withdrawals BIGINT, rejected_withdrawals BIGINT, 
+    approved_withdraw_volume DOUBLE, total_withdraw_fee_paid DOUBLE, crypto_withdraw_count BIGINT, 
+    fiat_withdraw_count BIGINT, withdraw_success_rate DOUBLE, last_successful_withdraw_date TIMESTAMPTZ,
+    last_withdraw_datetime TIMESTAMPTZ, days_since_last_withdraw BIGINT,
     
-    -- REFERRALS
-    inviter_user_code BIGINT,      -- Who invited them (NULL if none)
-    total_direct_referrals BIGINT, -- How many people they invited
+    -- TRADING & VOLUMES (Spot vs Futures)
+    first_trade_date TIMESTAMPTZ, first_trade_market TEXT, first_trade_symbol TEXT, days_to_first_trade BIGINT, has_ftt BIGINT,
+    first_futures_trade_date TIMESTAMPTZ, first_futures_symbol TEXT, has_futures_ftt BIGINT,
+    first_spot_trade_date TIMESTAMPTZ, first_spot_symbol TEXT, has_spot_ftt BIGINT,
+    milestone_trade_count BIGINT, milestone_futures_count BIGINT, milestone_spot_count BIGINT, 
+    milestone_total_volume DOUBLE, milestone_last_trade_date TIMESTAMPTZ,
+    total_trade_volume DOUBLE, total_trade_count BIGINT, total_trading_fees DOUBLE, total_net_fees DOUBLE, 
+    total_rebates DOUBLE, futures_trade_volume DOUBLE, futures_trade_count BIGINT, futures_fees DOUBLE, 
+    spot_trade_volume DOUBLE, spot_trade_count BIGINT, spot_fees DOUBLE, most_traded_symbol TEXT, 
+    avg_trade_size DOUBLE, avg_futures_trade_size DOUBLE, avg_spot_trade_size DOUBLE,
+    last_trade_datetime TIMESTAMPTZ, last_futures_trade_datetime TIMESTAMPTZ, last_spot_trade_datetime TIMESTAMPTZ,
+    days_since_last_trade BIGINT, is_active_trader_7d BIGINT, is_active_trader_30d BIGINT, 
+    is_active_user_7d BIGINT, is_active_user_30d BIGINT, avg_trades_per_day DOUBLE,
+    
+    -- BALANCES & PNL
+    total_available_balance DOUBLE, total_frozen DOUBLE, total_manually_frozen DOUBLE, 
+    total_wallet_balance DOUBLE, fund_account_balance DOUBLE, spot_account_balance DOUBLE, 
+    bot_account_balance DOUBLE, contract_account_balance DOUBLE, active_currency_count BIGINT, 
+    open_position_count BIGINT, long_position_count BIGINT, short_position_count BIGINT, 
+    total_position_value DOUBLE, total_init_margin DOUBLE, total_maintain_margin DOUBLE, 
+    total_extra_margin DOUBLE, total_realized_pnl DOUBLE, avg_leverage DOUBLE, max_leverage DOUBLE,
+    estimated_ltv DOUBLE, return_on_equity DOUBLE, wallet_retention_ratio DOUBLE,
+    
+    -- REBATES & NETWORK
+    rebate_from_own_trading DOUBLE, own_trading_rebate_count BIGINT, total_rebate_earned DOUBLE, 
+    rebate_distributed DOUBLE, rebate_pending DOUBLE, last_rebate_distribution_date TIMESTAMPTZ, 
+    total_rebate_count BIGINT, total_network_size BIGINT, total_direct_referrals BIGINT, 
+    rebate_earning_direct_refs_l1 DOUBLE, rebate_earning_direct_refs_l2 DOUBLE, rebate_earning_direct_refs_total DOUBLE, 
+    unique_rebate_earning_direct_refs BIGINT, rebate_from_level_1 DOUBLE, rebate_from_level_2 DOUBLE, 
+    rebate_from_referrals_total DOUBLE, referral_rebate_count BIGINT, is_referrer BIGINT, was_referred BIGINT, 
+    last_referral_rebate_date TIMESTAMPTZ,
     
     -- PARTITION
-    ds TEXT                        -- Date Partition 'YYYYMMDD' (e.g. '20260118')
+    ds TEXT
 );
 """
 
@@ -81,6 +117,19 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 
 **Segments (Exact Spelling):**
 - `user_segment`: 'VIP', 'High Value', 'Medium Value', 'Low Value', 'Depositor Only'
+
+**New Acronyms & Flags (1=True, 0=False):**
+- **FTT (First Time Trader)**: `has_ftt = 1`
+- **EFTD (Effective First Time Depositor)**: High-quality depositor `is_eftd = 1`.
+- **Risk/Fraud Flags**: `has_used_vpn`, `has_used_proxy`, `has_bot_detected`, `has_emulator_detected`, `has_rooted_device`. Use these directly to find suspicious users.
+- **LTV**: `estimated_ltv` (Lifetime Value).
+- **ROE**: `return_on_equity`.
+
+**New Granularity:**
+- Trading and volume are now split into **Spot** (`spot_trade_volume`) and **Futures** (`futures_trade_volume`). 
+- **Balances** are split across `fund`, `spot`, `bot`, and `contract` accounts.
+- **Active Users**: Can now be queried for 7 days (`is_active_trader_7d`) or 30 days (`is_active_trader_30d`).
+
 """
 
 # 4. Training Examples (The Patterns)
@@ -126,13 +175,15 @@ EXAMPLES = [
     },
 
     # CASE 3: DAU (Yesterday) & MAU (Monthly)
-    # Strategy: Scan the whole month for MAU to get true unique counts
     {
-        "question": "What is the DAU and MAU?",
+        "question": "What is the DAU, WAU, and MAU?",
         "sql": """
         SELECT 
-            (SELECT COUNT(DISTINCT user_code) FROM public.dwd_login_history_log_di WHERE ds = '{latest_ds}') as DAU,
-            (SELECT COUNT(DISTINCT user_code) FROM public.dwd_login_history_log_di WHERE ds BETWEEN '{start_30d}' AND '{latest_ds}') as MAU;
+            COUNT(CASE WHEN days_since_last_login = 0 THEN 1 END) as DAU,
+            COUNT(CASE WHEN is_active_user_7d = 1 THEN 1 END) as WAU,
+            COUNT(CASE WHEN is_active_user_30d = 1 THEN 1 END) as MAU
+        FROM public.user_profile_360 
+        WHERE ds = '{latest_ds}';
         """
     },
     {
@@ -181,6 +232,16 @@ EXAMPLES = [
         WHERE up.ds = '{latest_ds}' 
           AND up.user_segment = 'VIP'
         ORDER BY total_network_volume DESC;
+        """
+    },
+    {
+        "question": "Find high risk users who used a VPN or emulator and have a risk score above 0.8.",
+        "sql": """
+        SELECT user_code, email, max_risk_score, has_used_vpn, has_emulator_detected
+        FROM public.user_profile_360 
+        WHERE ds = '{latest_ds}' 
+          AND (has_used_vpn = 1 OR has_emulator_detected = 1) 
+          AND max_risk_score > 0.8;
         """
     }
     
