@@ -142,9 +142,9 @@ class QAService:
             start_time = datetime.now()
             try:
                 # Generate SQL using the real App Pipeline
-                #sql = await vn.generate_sql_async(question=q)
+                sql = await vn.generate_sql_async(question=q)
                 # NEW (Add the flag)
-                sql = await vn.generate_sql_async(question=q, allow_llm_to_see_data=True)
+                #sql = await vn.generate_sql_async(question=q, allow_llm_to_see_data=True)
                 
                 # Judge the result
                 verdict = QAService.evaluate_sql(q, sql)

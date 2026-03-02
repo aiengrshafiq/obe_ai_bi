@@ -127,5 +127,22 @@ EXAMPLES = [
         HAVING COUNT(DISTINCT ip) > 1
         ORDER BY distinct_ips DESC;
         """
+    },
+    {
+        "question": "Identify users who have shared device fingerprints and calculate their combined trading volume.",
+        "sql": """
+        SELECT 
+            d.visitor_id, 
+            COUNT(DISTINCT d.user_code) AS shared_users_count,
+            SUM(up.total_trade_volume) AS combined_trading_volume
+        FROM public.dwd_user_device_log_di d
+        JOIN public.user_profile_360 up 
+            ON d.user_code::TEXT = up.user_code::TEXT 
+            AND up.ds = '{latest_ds}'
+        WHERE d.ds = '{latest_ds}'
+        GROUP BY d.visitor_id
+        HAVING COUNT(DISTINCT d.user_code) > 1
+        ORDER BY combined_trading_volume DESC;
+        """
     }
 ]

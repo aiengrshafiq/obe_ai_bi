@@ -149,5 +149,39 @@ EXAMPLES = [
     {
         "question": "Sum of trading volume for these users (users invited by 10000047).",
         "sql": "SELECT SUM(total_trade_volume) FROM public.user_profile_360 WHERE ds = '{latest_ds}' AND inviter_user_code = 10000047;"
+    },
+    # Add this to the EXAMPLES list in app/cubes/user_profile.py
+    {
+        "question": "Compare daily new registered users (NRU) for this month vs last month.",
+        "sql": """
+        SELECT 'This Month' as period, registration_date_only, COUNT(user_code) as nru_count
+        FROM public.user_profile_360
+        WHERE ds = '{latest_ds}' AND registration_date_only >= '{start_this_month}'
+        GROUP BY 1, 2
+        UNION ALL
+        SELECT 'Last Month' as period, registration_date_only, COUNT(user_code) as nru_count
+        FROM public.user_profile_360
+        WHERE ds = '{latest_ds}' AND registration_date_only BETWEEN '{start_last_month}' AND '{end_last_month}'
+        GROUP BY 1, 2
+        ORDER BY period, registration_date_only;
+        """
+    },
+    # Add this to the end of the EXAMPLES list in app/cubes/user_profile.py
+    {
+        "question": "Calculate the total trade volume for each VIP partner including their referral network community volume",
+        "sql": """
+        SELECT 
+            up.user_code AS partner_id,
+            up.email,
+            COALESCE(ref.total_community_volume, up.total_trade_volume) AS total_network_volume
+        FROM public.user_profile_360 up
+        LEFT JOIN public.ads_total_root_referral_volume_df ref 
+            ON up.user_code::TEXT = ref.root_user_code::TEXT 
+            AND ref.ds = '{latest_ds}'
+        WHERE up.ds = '{latest_ds}' 
+          AND up.user_segment = 'VIP'
+        ORDER BY total_network_volume DESC;
+        """
     }
+    
 ]

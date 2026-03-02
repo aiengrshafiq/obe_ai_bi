@@ -10,5 +10,5 @@ class SQLAgent:
         """
         Generates SQL using the RAG model.
         """
-        sql = await vn.generate_sql_async(question=prompt, allow_llm_to_see_data=True)
+        sql = await vn.generate_sql_async(question=prompt)
         return sql
