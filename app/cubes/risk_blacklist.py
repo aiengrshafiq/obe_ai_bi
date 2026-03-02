@@ -63,7 +63,13 @@ EXAMPLES = [
         "sql": "SELECT DATE(start_date) as ban_date, COUNT(user_code) as banned_users FROM public.risk_campaign_blacklist GROUP BY 1 ORDER BY 1;"
     },
     {
-        "question": "Blacklist user trend daily.",
-        "sql": "SELECT DATE(start_date) as report_date, COUNT(user_code) FROM public.risk_campaign_blacklist GROUP BY 1 ORDER BY 1;"
+        "question": "How many users were blacklisted in the last 7 days?",
+        "sql": """
+        SELECT DATE(start_date) as report_date, COUNT(user_code) as banned_users 
+        FROM public.risk_campaign_blacklist 
+        WHERE start_date >= '{start_7d}'
+        GROUP BY 1 
+        ORDER BY 1;
+        """
     }
 ]
