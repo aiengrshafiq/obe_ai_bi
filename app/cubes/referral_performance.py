@@ -66,6 +66,8 @@ Used to track Partner/Affiliate performance. Key distinction:
 1. **Partition:** Always filter by `ds = '{latest_ds}'` for the latest snapshot.
 2. **Active Ratio:** Calculated as `active_referrals / total_referrals`.
 3. **High Value Partners:** Look for high `total_referral_volume` and `active_deposit_users`.
+4. **Data Types (CRITICAL):** `root_user_code` is a STRING. Always wrap specific partner IDs in quotes (e.g., `WHERE root_user_code = '10000047'`).
+5. **Strict Partition Rule:** Because this is a `_df` (Snapshot) table, you MUST ALWAYS use `ds = '{latest_ds}'`. NEVER use `ds >=` or range filters on this table.
 """
 
 # 3. Training Examples (Dynamic Date)
@@ -118,6 +120,15 @@ EXAMPLES = [
         WHERE ds = '{latest_ds}'
         AND total_referrals > 0
         AND total_referral_trades = 0;
+        """
+    },
+    {
+        "question": "Show the current community volume and active referrals for partner 10000047.",
+        "sql": """
+        SELECT total_community_volume, active_referrals
+        FROM public.ads_total_root_referral_volume_df
+        WHERE ds = '{latest_ds}'
+          AND root_user_code = '10000047';
         """
     }
 ]
