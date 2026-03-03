@@ -47,56 +47,61 @@ class Orchestrator:
         """Executes the full Intelligence Pipeline with Self-Correction."""
         start_time = time.time()
         
-        # --- STEP 0: CONTEXT RESOLUTION (Structured) ---
-        final_msg = user_msg
-        context_metadata = {}
-
-        if raw_history:
-            # Run the resolver in a thread to be safe
-            resolution = await asyncio.to_thread(ContextResolver.resolve, user_msg, raw_history)
-            
-            # Logic: If high confidence rewrite, use it.
-            if resolution.get("confidence", 0) > 0.6:
-                final_msg = resolution["rewritten_query"]
-                context_metadata = resolution
-                print(f"🔄 Context Rewritten: '{user_msg}' -> '{final_msg}'")
-            else:
-                print(f"⚠️ Context skipped (Low Confidence): Using original message.")
-        # -----------------------------------------------
-
-        # 1. Build Legacy String Context (For the SQL Prompt)
-        # We still pass this to SQLAgent so it sees the conversation flow
-        history_context = ""
-        if raw_history:
-             recent = raw_history[-4:]
-             history_context = "PREVIOUS CONVERSATION:\n" + "\n".join(
-                 [f"{msg.get('role', 'unknown').upper()}: {str(msg.get('content',''))[:200]}..." for msg in recent]
-             )
-
-        log_entry = ChatLog(
-            username=self.user, 
-            user_question=final_msg, # Log the RESOLVED question
-            context_provided=history_context,
-            correction_attempts=0
-        )
-        self.db.add(log_entry)
-        self.db.commit()
-
+        # ⚠️ FIX 1: Move the master try/finally to the VERY TOP to guarantee DB closure
         try:
-            # --- STEP 1: INTENT ---
+            # --- STEP 0: CONTEXT RESOLUTION (Structured & Safe) ---
+            final_msg = user_msg
+            context_metadata = {}
+
+            if raw_history:
+                # ⚠️ FIX 5: Protect ContextResolver from crashing the pipeline
+                try:
+                    resolution = await asyncio.to_thread(ContextResolver.resolve, user_msg, raw_history)
+                    if resolution.get("confidence", 0) > 0.6:
+                        final_msg = resolution["rewritten_query"]
+                        context_metadata = resolution
+                        print(f"🔄 Context Rewritten: '{user_msg}' -> '{final_msg}'")
+                    else:
+                        print(f"⚠️ Context skipped (Low Confidence): Using original message.")
+                except Exception as e:
+                    print(f"⚠️ ContextResolver Error: {e}. Falling back to original message.")
+            # -----------------------------------------------
+
+            # 1. Build Legacy String Context
+            history_context = ""
+            if raw_history:
+                 recent = raw_history[-4:]
+                 history_context = "PREVIOUS CONVERSATION:\n" + "\n".join(
+                     [f"{msg.get('role', 'unknown').upper()}: {str(msg.get('content',''))[:200]}" for msg in recent]
+                 )
+
+            # Initialize Log Entry
+            log_entry = ChatLog(
+                username=self.user, 
+                user_question=final_msg, 
+                context_provided=history_context,
+                correction_attempts=0
+            )
+            self.db.add(log_entry)
+            self.db.commit()
+
+            # --- STEP 1: INTENT & SHORT CONFIRMATIONS ---
+            # ⚠️ FIX 3: Prevent "Yes/Ok" from triggering the general greeting if mid-conversation
+            short_confirmations = {"yes", "ok", "sure", "do it", "go ahead", "yep", "yeah", "continue"}
+            is_follow_up = raw_history and user_msg.strip().lower() in short_confirmations
+
             intent_result = await IntentAgent.classify(final_msg)
             
-            if intent_result.get("intent_type") == "general_chat":
-                return self._finalize_safe(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
-            
-            if intent_result.get("intent_type") == "ambiguous":
-                clarification = intent_result.get("clarification_question") or "Could you please clarify which metrics or dates you are interested in?"
-                return self._finalize_safe(log_entry, "text", message=clarification)
+            if not is_follow_up:
+                if intent_result.get("intent_type") == "general_chat":
+                    return self._finalize_safe(log_entry, "text", message="Hello! I am your Data Analyst. Ask me about Users, Volume, Deposits, or Risk.")
+                
+                if intent_result.get("intent_type") == "ambiguous":
+                    clarification = intent_result.get("clarification_question") or "Could you please clarify which metrics or dates you are interested in?"
+                    return self._finalize_safe(log_entry, "text", message=clarification)
 
             # --- STEP 2: PREPARE CONTEXT (DateResolver) ---
             date_context = await DateResolver.get_date_context()
-            
-            # LOGGING: Save the resolved date
             log_entry.resolved_latest_ds = date_context['latest_ds']
 
             # --- STEP 3: REASONING LOOP (Self-Healing) ---
@@ -104,36 +109,29 @@ class Orchestrator:
             attempts = 0
             last_error = None
             
-            # Initial Prompt (Uses FINAL_MSG)
-            current_prompt = self._build_prompt(final_msg, history_context, intent_result, date_context)
+            # ⚠️ FIX 2: Store the original massive prompt so we don't lose it on retries
+            base_prompt = self._build_prompt(final_msg, history_context, intent_result, date_context)
+            current_prompt = base_prompt
             
             while attempts <= max_retries:
-                # Initialize variables to avoid UnboundLocalError
                 clean_sql = ""
-                
                 try:
                     # A. Generate SQL
                     generated_sql = await SQLAgent.generate(current_prompt)
                     
-                    # --- NEW FIX: Detect and Reject Intermediate SQL ---
                     if "intermediate_sql" in generated_sql.lower():
                         raise ValueError("LLM tried to inspect data (intermediate_sql detected). Retrying with stricter instruction.")
-                    # ---------------------------------------------------
                     
-                    # Clean the output
                     clean_sql = re.sub(r'```sql|```', '', generated_sql, flags=re.IGNORECASE).strip()
                     clean_sql = clean_sql.replace("CLARIFICATION:", "").strip()
 
-                    # --- NEW FIX: Handle "I don't know" text responses ---
-                    # If it doesn't start with SELECT/WITH, it's not SQL. Don't parse it.
                     if not re.match(r'^\s*(SELECT|WITH)\b', clean_sql, re.IGNORECASE):
                         return self._finalize_safe(log_entry, "text", message=clean_sql)
-                    # -----------------------------------------------------
 
                     # B. Safety Gate
                     safe_sql = SQLGuard.validate_and_fix(clean_sql)
                     
-                    # LOGGING: Extract Tables
+                    # Extract Tables
                     tables = re.findall(r'(?:FROM|JOIN)\s+(?:public\.)?([a-zA-Z0-9_]+)', safe_sql, re.IGNORECASE)
                     log_entry.tables_used = ", ".join(set(tables))
                     
@@ -143,36 +141,27 @@ class Orchestrator:
                     # D. Execution
                     df = await vn.run_sql_async(final_sql)
                     
-                    # Log Success & Update attempts
                     log_entry.generated_sql = final_sql
                     log_entry.correction_attempts = attempts
                     self.db.commit()
 
                     if df is None or df.empty:
-                        # Calculate timing before returning
                         log_entry.execution_ms = int((time.time() - start_time) * 1000)
                         return self._finalize_safe(log_entry, "success", sql=final_sql, message="No data found.", data=[])
 
-                    # E. Visualization
+                    # E. Visualization & Suggestions
                     df = self._sanitize_dataframe(df)
-                    
-                    # LOGGING: Row Count
                     log_entry.row_count = len(df)
                     
-                    viz_result = await VisualizationAgent.determine_format(df, final_sql, final_msg, intent_result) # <--- Passed final_msg
-                    
-                    # LOGGING: Visual Type
+                    viz_result = await VisualizationAgent.determine_format(df, final_sql, final_msg, intent_result)
                     visual_type = viz_result.get("visual_type", "table")
                     log_entry.visual_type = visual_type
 
-                    # --- NEW: Generate Suggestions ---
                     suggestions = SuggestionAgent.generate(df, final_msg)
-                    # ---------------------------------
                     
                     df_safe = df.where(pd.notnull(df), None)
                     safe_data = df_safe.head(5000 if visual_type == "plotly" else 100).to_dict(orient='records')
 
-                    # LOGGING: Final Execution Time
                     log_entry.execution_ms = int((time.time() - start_time) * 1000)
 
                     result = self._finalize(
@@ -193,11 +182,17 @@ class Orchestrator:
                     
                     if attempts <= max_retries:
                         sql_context = clean_sql if clean_sql else "NO_SQL_GENERATED"
+                        
+                        # ⚠️ FIX 2: Append the error to the BASE prompt, maintaining all system rules
                         current_prompt = (
-                            f"The previous SQL you generated failed.\n"
-                            f"FAILED SQL: {sql_context}\n"
-                            f"ERROR MESSAGE: {last_error}\n"
-                            f"TASK: Fix the SQL logic. Return ONLY the valid SQL."
+                            base_prompt + 
+                            f"\n\n======================================\n"
+                            f"⚠️ PREVIOUS ATTEMPT FAILED\n"
+                            f"You must correct the SQL based on the error below while strictly adhering to all rules above.\n\n"
+                            f"FAILED SQL:\n{sql_context}\n\n"
+                            f"DATABASE ERROR:\n{last_error}\n"
+                            f"======================================\n"
+                            f"TASK: Output ONLY the corrected SQL."
                         )
                     else:
                         break # Exit loop
@@ -210,8 +205,10 @@ class Orchestrator:
         except Exception as e:
             print(f"Orchestrator Fatal Error: {e}")
             traceback.print_exc()
-            return self._finalize_safe(log_entry, "error", message="An internal system error occurred.")
+            return self._finalize_safe(log_entry if 'log_entry' in locals() else None, "error", message="An internal system error occurred.")
+        
         finally:
+            # ⚠️ FIX 1: This is now guaranteed to run, closing the DB session no matter what crashes
             self.db.close()
 
     # --- HELPERS ---
