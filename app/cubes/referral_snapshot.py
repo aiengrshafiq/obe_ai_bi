@@ -1,10 +1,11 @@
-# app/cubes/referral_performance.py
+# app/cubes/referral_snapshot.py
 
-NAME = "Referral Performance Cube"
-DESCRIPTION = "Tracks root partner performance, referral volumes, community size, and commission-related metrics."
+NAME = "Referral Network Snapshot"
+DESCRIPTION = "Tracks the current state, network size, and all-time lifetime totals of a partner's community."
 HAS_TIME_FIELD = False
 TIME_COLUMN = None
 KIND = "df"
+
 # 1. DDL
 DDL = """
 CREATE TABLE public.ads_total_root_referral_volume_df (
@@ -53,24 +54,20 @@ CREATE TABLE public.ads_total_root_referral_volume_df (
 # 2. Documentation
 DOCS = """
 **Table Purpose:**
-Used to track Partner/Affiliate performance. Key distinction:
-- **Referral Metrics:** Activity done by people the partner invited (Excludes the partner). Use these for commission calculations.
-- **Community Metrics:** Activity done by the Partner + Their Referrals combined.
-- **Root User:** The partner at the top of the tree.
+Used for finding Partner ALL-TIME totals, lifetime metrics, and the current state of their network.
 
-** ⚡ PERFORMANCE & JOINS (CRITICAL):**
-- **PRE-CALCULATED TOTALS:** This table ALREADY contains aggregated volumes (`total_referral_volume`, `total_community_volume`).
-- **Rule:** Use these columns directly. **DO NOT JOIN** the `dws_all_trades_di` table to calculate volume unless the user asks for a very specific custom time range not covered here.
+** ⚡ ROUTING RULE (CRITICAL):**
+- Use this table ONLY when asked for "Total", "Lifetime", "All-time", or "Current" stats.
+- DO NOT use this table if the user asks for a trend or a specific timeframe (e.g., "Last 7 days" or "in February").
 
 **Critical Logic:**
-1. **Partition:** Always filter by `ds = '{latest_ds}'` for the latest snapshot.
-2. **Active Ratio:** Calculated as `active_referrals / total_referrals`.
-3. **High Value Partners:** Look for high `total_referral_volume` and `active_deposit_users`.
-4. **Data Types (CRITICAL):** `root_user_code` is a STRING. Always wrap specific partner IDs in quotes (e.g., `WHERE root_user_code = '10000047'`).
-5. **Strict Partition Rule:** Because this is a `_df` (Snapshot) table, you MUST ALWAYS use `ds = '{latest_ds}'`. NEVER use `ds >=` or range filters on this table.
+1. **Partition:** Because this is a `_df` (Snapshot) table, you MUST ALWAYS use `ds = '{latest_ds}'`. NEVER use `ds >=` or range filters on this table.
+2. **Data Types:** `root_user_code` is a STRING. Always wrap specific partner IDs in quotes (e.g., `WHERE root_user_code = '10000047'`).
+3. **Active Ratio:** Calculated as `active_referrals / total_referrals`.
+4. **Referral vs Community:** "Referral" metrics exclude the partner's own trading. "Community" metrics include the partner + their referrals.
 """
 
-# 3. Training Examples (Dynamic Date)
+# 3. Training Examples
 EXAMPLES = [
     {
         "question": "Who are the top 10 partners by total referral volume?",

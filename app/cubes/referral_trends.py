@@ -1,0 +1,109 @@
+# app/cubes/referral_trends.py
+
+NAME = "Referral Daily Trends"
+DESCRIPTION = "Tracks daily changes in partner networks. Use to find new referrals, specific dates, or volume within a specific time range."
+HAS_TIME_FIELD = True
+TIME_COLUMN = "ds"
+KIND = "di"
+
+# 1. DDL
+DDL = """
+CREATE TABLE public.ads_total_root_referral_volume_di (
+    -- ROOT USER INFO (The Partner)
+    root_user_code TEXT,
+    root_country TEXT,
+    root_user_type TEXT,
+    
+    -- DAILY NEW NETWORK SIZE
+    daily_referrals BIGINT,
+    daily_invited_registrants BIGINT,
+    daily_active_referrals BIGINT,
+    daily_active_deposit_users BIGINT,
+    daily_new_funded_users BIGINT,
+    
+    -- DAILY COMMUNITY METRICS
+    daily_community_volume DOUBLE PRECISION,
+    daily_community_trades BIGINT,
+    prev_day_community_volume DOUBLE PRECISION,
+    
+    -- DAILY REFERRAL ONLY METRICS
+    daily_referral_trades BIGINT,
+    daily_referral_volume DOUBLE PRECISION,
+    daily_referral_futures_volume DOUBLE PRECISION,
+    daily_referral_spot_volume DOUBLE PRECISION,
+    prev_day_referral_volume DOUBLE PRECISION,
+    
+    -- DAILY FINANCIALS
+    daily_deposit_amount DOUBLE PRECISION,
+    daily_referral_pnl DOUBLE PRECISION,
+    prev_day_referral_pnl DOUBLE PRECISION,
+    
+    -- DAILY ROOT OWN ACTIVITY
+    daily_root_futures_volume DOUBLE PRECISION,
+    daily_root_futures_trades BIGINT,
+    
+    -- PARTITION
+    ds TEXT
+);
+"""
+
+# 2. Documentation
+DOCS = """
+**Table Purpose:**
+Used for analyzing Partner Performance over a specific timeframe or to plot a daily trend.
+
+** ⚡ ROUTING RULE (CRITICAL):**
+- Use this table ONLY when the user asks for a specific timeframe (e.g., "Last 7 days") or a "Trend".
+- DO NOT use this table if the user asks for an all-time leaderboard or lifetime totals.
+
+**Partitioning Rule (`_di` table):**
+- **Default:** If the user does NOT specify a timeframe, default to `ds = '{latest_ds}'` (which represents yesterday's daily activity).
+- **Historical Analysis:** To get history, trends, or specific date ranges, you MUST use `ds >= '{start_7d}'` or `ds BETWEEN '{start_30d}' AND '{latest_ds}'`.
+
+**General Rules:**
+- `root_user_code` is a STRING. Always wrap specific partner IDs in quotes (e.g., `WHERE root_user_code = '10000047'`).
+- "Referral" metrics exclude the partner's own trading. "Community" metrics include the partner + their referrals.
+"""
+
+# 3. Training Examples
+EXAMPLES = [
+    {
+        "question": "Show the daily referral volume trend for partner 10000047 over the last 30 days.",
+        "sql": """
+        SELECT ds AS report_date, daily_referral_volume, daily_active_referrals
+        FROM public.ads_total_root_referral_volume_di
+        WHERE root_user_code = '10000047' 
+          AND ds >= '{start_30d}'
+        ORDER BY ds ASC;
+        """
+    },
+    {
+        "question": "Which partners generated the most new referrals in the last 7 days?",
+        "sql": """
+        SELECT root_user_code, SUM(daily_referrals) AS new_referrals_last_7d
+        FROM public.ads_total_root_referral_volume_di
+        WHERE ds >= '{start_7d}'
+        GROUP BY root_user_code
+        ORDER BY new_referrals_last_7d DESC
+        LIMIT 10;
+        """
+    },
+    {
+        "question": "How much deposit amount did referrals make yesterday?",
+        "sql": """
+        SELECT SUM(daily_deposit_amount) as total_deposits_yesterday
+        FROM public.ads_total_root_referral_volume_di
+        WHERE ds = '{latest_ds}';
+        """
+    },
+    {
+        "question": "What is the daily trend of new funded users for the entire platform this month?",
+        "sql": """
+        SELECT ds as report_date, SUM(daily_new_funded_users) as total_new_funded
+        FROM public.ads_total_root_referral_volume_di
+        WHERE ds >= '{start_this_month}'
+        GROUP BY ds
+        ORDER BY ds ASC;
+        """
+    }
+]

@@ -81,6 +81,7 @@ class DateResolver:
         end_last_month = start_this_month - timedelta(days=1)
         start_last_month = end_last_month.replace(day=1)
 
+        
         return {
             "latest_ds": latest_ds,             
             "latest_ds_dash": latest_ds_dash,   
@@ -89,7 +90,12 @@ class DateResolver:
             "start_7d_dash": start_7d_dash,
             "start_30d": start_30d,
             "start_30d_dash": start_30d_dash,
+            # THE DASH FORMATS (For DATE/TIMESTAMP columns)
             "start_this_month_dash": start_this_month.strftime("%Y-%m-%d"),
             "start_last_month_dash": start_last_month.strftime("%Y-%m-%d"),
-            "end_last_month_dash": end_last_month.strftime("%Y-%m-%d")
+            "end_last_month_dash": end_last_month.strftime("%Y-%m-%d"),
+            # ADD THESE: THE NON-DASH FORMATS (For 'ds' TEXT columns)
+            "start_this_month": start_this_month.strftime("%Y%m%d"),
+            "start_last_month": start_last_month.strftime("%Y%m%d"),
+            "end_last_month": end_last_month.strftime("%Y%m%d")
         }

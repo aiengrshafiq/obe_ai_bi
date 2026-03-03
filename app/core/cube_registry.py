@@ -7,7 +7,8 @@ from pydantic import BaseModel
 import app.cubes.user_profile as user_cube
 import app.cubes.transaction_detail as trans_cube
 import app.cubes.trade_activity as trade_cube
-import app.cubes.referral_performance as referral_cube
+import app.cubes.referral_snapshot as ref_snap_cube  # <-- CHANGED
+import app.cubes.referral_trends as ref_trend_cube   # <-- NEW
 import app.cubes.points_system as points_cube
 import app.cubes.login_history as login_cube
 import app.cubes.device_log as device_cube
@@ -36,7 +37,7 @@ class CubeRegistry:
             return
 
         cubes = [
-            user_cube, trans_cube, trade_cube, referral_cube, 
+            user_cube, trans_cube, trade_cube, ref_snap_cube, ref_trend_cube, 
             points_cube, login_cube, device_cube, risk_cube
         ]
 

@@ -220,22 +220,18 @@ class Orchestrator:
             history=history,
             intent_type=intent.get('intent_type'),
             entities=intent.get('entities', []),
-            latest_ds=date_ctx['latest_ds'],
-            latest_ds_iso=date_ctx['latest_ds_dash'],
-            today_iso=date_ctx['today_iso'],
-            start_7d=date_ctx['start_7d'],              # Passed to original slot
-            start_7d_dash=date_ctx['start_7d_dash'],    # <--- CRITICAL FIX (Match prompt sig)
-            start_this_month=date_ctx['start_this_month_dash'], 
-            start_last_month=date_ctx['start_last_month_dash'], 
-            end_last_month=date_ctx['end_last_month_dash'],     
+            date_ctx=date_ctx,
             user_msg=msg
         )
+        
 
+    
     def _apply_replacements(self, sql, date_ctx):
-        sql = sql.replace("{latest_ds}", date_ctx['latest_ds'])
-        sql = sql.replace("{latest_ds_dash}", date_ctx['latest_ds_dash'])
-        sql = sql.replace("{today_iso}", date_ctx['today_iso'])
-        sql = sql.replace("{start_30d}", date_ctx['start_30d'])
+        # DYNAMIC SAFETY NET:
+        # If the LLM mimics a training example and outputs a literal string 
+        # like "{start_last_month_dash}", this safely replaces it with the real date.
+        for key, value in date_ctx.items():
+            sql = sql.replace(f"{{{key}}}", str(value))
         return sql
         
     def _sanitize_dataframe(self, df):
