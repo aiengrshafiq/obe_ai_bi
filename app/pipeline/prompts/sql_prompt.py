@@ -67,8 +67,14 @@ def get_sql_system_prompt(history: str, intent_type: str, entities: list, date_c
 
       2. **Snapshot + Incremental (df + di):**
         - **Snapshot:** Filter `ds = '{date_ctx['latest_ds']}'`.
-        - **Incremental:** Filter `ds` based on the timeframe requested (e.g. `ds >= '{date_ctx['start_7d']}'`). DO NOT use `ds = '{date_ctx['latest_ds']}'` unless specifically asking for "Today/Yesterday".
+        - **Incremental:** Filter `ds` based on the timeframe requested (e.g. `ds >= '{date_ctx['start_7d']}'`).
         - **Lifetime/Total:** If asking for "Total", DO NOT JOIN the Incremental table. Use pre-calculated fields in the Snapshot table.
+        - **Correct Mixed Join Pattern:**
+          FROM public.dwd_user_device_log_di d
+          JOIN public.user_profile_360 u 
+            ON d.user_code::TEXT = u.user_code::TEXT  -- CAST BOTH TO TEXT
+            AND u.ds = '{date_ctx['latest_ds']}'      -- STRICT SNAPSHOT FILTER ON JOIN
+          WHERE d.ds >= '{date_ctx['start_30d']}'     -- TIMEFRAME ON INCREMENTAL TABLE
 
       3. **Incremental + Incremental (di + di):**
         - Filter BOTH on the exact same `ds` Date Range.
@@ -100,11 +106,11 @@ def get_sql_system_prompt(history: str, intent_type: str, entities: list, date_c
 
     CRITICAL OUTPUT RULES (MUST FOLLOW):
     1. **NO DATA INSPECTION:** Do NOT generate `intermediate_sql` to check for distinct values. You do NOT have read access to browse data.
-    2. Output ONLY final executable SQL (SELECT/WITH). No markdown.
+    2. Output ONLY final executable SQL (SELECT/WITH). No markdown, no explanations.
     3. NEVER output intermediate_sql or attempt to inspect data with "SELECT DISTINCT ..." first.
-    4. If the question is ambiguous, ASK ONE CLARIFYING QUESTION instead of guessing.
-
-    
+    4. If the question is genuinely ambiguous, ASK ONE CLARIFYING QUESTION.
+    5. **IGNORE META-QUESTIONS (CRITICAL):** If a user asks an architectural meta-question (e.g., "Which table should I use?" or "Should I use the snapshot or incremental table?"), DO NOT answer them with text. Silently make the correct decision based on the Routing Rules and output ONLY the SQL.
+    6. **NO SYSTEM COMPLAINTS:** NEVER output phrases like "The LLM is not allowed to see the data" or ask to enable `allow_llm_to_see_data`. You have the full schema and all the rules you need. Just write the query.
 
     NEW QUESTION: {user_msg}
     """

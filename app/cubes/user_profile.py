@@ -131,6 +131,10 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 - **Balances** are split across `fund`, `spot`, `bot`, and `contract` accounts.
 - **Active Users**: Can now be queried for 7 days (`is_active_trader_7d`) or 30 days (`is_active_trader_30d`).
 
+**Snapshot Trend Exception:**
+- Normally, you only query `ds = '{latest_ds}'`.
+- HOWEVER, if the user explicitly asks for the "daily trend" of a snapshot state (e.g., "trend of active traders over time"), you MAY query a range of `ds` partitions.
+- **CRITICAL:** If you do this, you MUST aggregate the data using `GROUP BY ds` and `COUNT(CASE WHEN...)` or `SUM()`. NEVER select raw user rows across multiple days.
 """
 
 # 4. Training Examples (The Patterns)
@@ -243,6 +247,30 @@ EXAMPLES = [
         WHERE ds = '{latest_ds}' 
           AND (has_used_vpn = 1 OR has_emulator_detected = 1) 
           AND max_risk_score > 0.8;
+        """
+    },
+    {
+        "question": "Show the daily trend of active traders (both 7-day and 30-day) and total trading volume for the past 14 days. Limit the results to the most recent 14 days and order by date descending.",
+        "sql": """
+        SELECT 
+            ds,
+            COUNT(CASE WHEN is_active_trader_7d = 1 THEN 1 END) AS active_traders_7d,
+            COUNT(CASE WHEN is_active_trader_30d = 1 THEN 1 END) AS active_traders_30d,
+            SUM(total_trade_volume) AS cumulative_lifetime_volume
+        FROM public.user_profile_360
+        WHERE ds >= TO_CHAR(TO_DATE('{latest_ds}', 'YYYYMMDD') - 14, 'YYYYMMDD')
+        GROUP BY ds
+        ORDER BY ds DESC;
+        """
+    },
+    {
+        "question": "Calculate the success rate of withdrawals for users with VIP segment status.",
+        "sql": """
+        SELECT 
+            AVG(withdraw_success_rate) AS overall_vip_withdraw_success_rate
+        FROM public.user_profile_360
+        WHERE ds = '{latest_ds}' 
+          AND user_segment = 'VIP';
         """
     }
     

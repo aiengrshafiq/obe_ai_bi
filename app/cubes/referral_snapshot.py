@@ -57,8 +57,9 @@ DOCS = """
 Used for finding Partner ALL-TIME totals, lifetime metrics, and the current state of their network.
 
 ** ⚡ ROUTING RULE (CRITICAL):**
-- Use this table ONLY when asked for "Total", "Lifetime", "All-time", or "Current" stats.
-- DO NOT use this table if the user asks for a trend or a specific timeframe (e.g., "Last 7 days" or "in February").
+- Use this table ONLY when asked for "Total", "Lifetime", "All-time", or "Current" stats WITHOUT a specific timeframe.
+- **ANTI-TRAP:** If the user uses the word "Total" but attaches a date range (e.g., "Total volume in the last 7 days" or "Total referrals this month"), you MUST REJECT this table and use `ads_total_root_referral_volume_di` instead.
+
 
 **Critical Logic:**
 1. **Partition:** Because this is a `_df` (Snapshot) table, you MUST ALWAYS use `ds = '{latest_ds}'`. NEVER use `ds >=` or range filters on this table.

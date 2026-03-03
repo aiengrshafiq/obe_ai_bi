@@ -146,5 +146,18 @@ EXAMPLES = [
         HAVING COUNT(DISTINCT d.user_code) > 1
         ORDER BY combined_trading_volume DESC;
         """
+    },
+    {
+        "question": "Identify all high-risk users who have used VPN, proxy, or have been detected with bot activity within the last 30 days.",
+        "sql": """
+        SELECT DISTINCT u.user_code, u.email, u.max_risk_score
+        FROM public.dwd_user_device_log_di d
+        JOIN public.user_profile_360 u 
+          ON d.user_code::TEXT = u.user_code::TEXT 
+          AND u.ds = '{latest_ds}'
+        WHERE d.ds >= '{start_30d}'
+          AND (d.is_vpn = 1 OR d.is_proxy = 1 OR d.is_bot = 1)
+          AND u.max_risk_score > 0.8;
+        """
     }
 ]

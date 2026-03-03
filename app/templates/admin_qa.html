@@ -252,6 +252,8 @@
                     this.progress = 100;
                     
                     setTimeout(() => {
+                        if (data.failed === undefined) data.failed = data.total - data.passed;
+                        if (data.accuracy === undefined) data.accuracy = data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0;
                         this.report = data;
                         this.isLoading = false;
                         this.loadHistory(); // Refresh history table
