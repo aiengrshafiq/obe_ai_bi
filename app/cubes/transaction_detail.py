@@ -118,5 +118,15 @@ EXAMPLES = [
           AND type = 'withdraw'
         GROUP BY coin;
         """
+    },
+    {
+        "question": "Show the daily trend of deposit amounts.",
+        "sql": """
+        SELECT ds AS report_date, SUM(real_amount) AS total_daily_deposit
+        FROM public.dws_user_deposit_withdraw_detail_di
+        WHERE type = 'deposit' AND ds >= '{start_30d}'
+        GROUP BY ds
+        ORDER BY ds ASC;
+        """
     }
 ]

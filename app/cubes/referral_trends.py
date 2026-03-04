@@ -64,6 +64,7 @@ Used for analyzing Partner Performance over a specific timeframe or to plot a da
 - `root_user_code` is a STRING. Always wrap specific partner IDs in quotes (e.g., `WHERE root_user_code = '10000047'`).
 - "Referral" metrics exclude the partner's own trading. "Community" metrics include the partner + their referrals.
 - **The "Total + Timeframe" Trap:** If a user asks for "Total volume in the last 7 days", you MUST use this `_di` table and calculate it using `SUM(daily_referral_volume)`. Do NOT use the snapshot table.
+- **GLOBAL METRICS TRAP:** If a user asks for "daily deposit trend" or "total platform deposits", DO NOT use this table. The `daily_deposit_amount` here ONLY represents deposits made by referred users. For global platform deposits, you MUST use `dws_user_deposit_withdraw_detail_di`.
 """
 
 # 3. Training Examples
