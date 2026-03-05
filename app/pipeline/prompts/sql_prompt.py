@@ -102,6 +102,8 @@ def get_sql_system_prompt(history: str, intent_type: str, entities: list, date_c
     4. **Query Pattern:** Use `SELECT DATE_TRUNC('hour', [timestamp_col])`. NEVER use `DATE_TRUNC` on the `ds` column because `ds` is a TEXT string, not a timestamp.
     5. **LIMITS:** - **Do NOT** use `LIMIT` for Trend/Aggregation queries (Group By). The system handles large datasets automatically.
        - **Only** use `LIMIT` if listing raw user IDs or transactions (e.g. `LIMIT 100`).
+    6. **ANTI-HALLUCINATION (STRICT):** You MUST ONLY select columns that explicitly exist in the provided DDL. If the user asks for a column that does not exist (e.g., 'phone', 'name', 'address'), completely IGNORE that part of their request. Default to `email` and `user_code` for identity.
+    7. **FUZZY LOGIC HANDLING:** If a user uses subjective terms like "huge", "whale", "massive", or "top", DO NOT invent a hardcoded `WHERE` threshold (e.g., `amount > 10000`). Instead, achieve this by sorting the data (`ORDER BY volume DESC`) and applying a `LIMIT 50` to naturally surface the highest values.
 
 
     CRITICAL OUTPUT RULES (MUST FOLLOW):
