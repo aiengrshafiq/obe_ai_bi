@@ -37,6 +37,10 @@ If a user is in this table, they are risky/banned.
 4. **Trend Analysis:** This table is NOT partitioned by 'ds'. 
    - To show a daily trend, you MUST group by `DATE(start_date)`.
    - Example: `GROUP BY DATE(start_date)`.
+
+**Business Logic:**
+- **Currently Blacklisted:** To find users who are *currently* banned or have an ongoing penalty, you MUST filter using `end_date >= '{latest_ds_dash}'`. NEVER use `CURRENT_TIMESTAMP`.
+
 """
 
 # 3. Training Examples (Single & Bulk)
@@ -70,6 +74,16 @@ EXAMPLES = [
         WHERE start_date >= '{start_7d}'
         GROUP BY 1 
         ORDER BY 1;
+        """
+    },
+    {
+        "question": "Find all currently blacklisted users and show when they were added to the blacklist, grouped by the reason for blacklisting",
+        "sql": """
+        SELECT reason, start_date, COUNT(user_code) as user_count 
+        FROM public.risk_campaign_blacklist 
+        WHERE end_date >= '{latest_ds_dash}'
+        GROUP BY reason, start_date 
+        ORDER BY start_date DESC;
         """
     }
 ]

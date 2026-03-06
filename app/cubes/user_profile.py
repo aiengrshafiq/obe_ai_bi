@@ -125,6 +125,7 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 - **Risk/Fraud Flags**: `has_used_vpn`, `has_used_proxy`, `has_bot_detected`, `has_emulator_detected`, `has_rooted_device`. Use these directly to find suspicious users.
 - **LTV**: `estimated_ltv` (Lifetime Value).
 - **ROE**: `return_on_equity`.
+- **Risk/Fraud Flags & High Risk:** "High-risk behavior" ALWAYS means `max_risk_score > 0.8`. Use flags like `has_used_vpn`, `has_used_proxy`, `has_bot_detected`, `has_emulator_detected` directly to find suspicious users.
 
 **New Granularity:**
 - Trading and volume are now split into **Spot** (`spot_trade_volume`) and **Futures** (`futures_trade_volume`). 
@@ -271,6 +272,53 @@ EXAMPLES = [
         FROM public.user_profile_360
         WHERE ds = '{latest_ds}' 
           AND user_segment = 'VIP';
+        """
+    },
+    {
+        "question": "Show the daily trend of active traders (both 7-day and 30-day active) over the past 30 days along with the total daily trading volume.",
+        "sql": """
+        WITH daily_traders AS (
+            SELECT 
+                ds,
+                COUNT(CASE WHEN is_active_trader_7d = 1 THEN 1 END) AS active_traders_7d,
+                COUNT(CASE WHEN is_active_trader_30d = 1 THEN 1 END) AS active_traders_30d
+            FROM public.user_profile_360
+            WHERE ds >= TO_CHAR(TO_DATE('{latest_ds}', 'YYYYMMDD') - 30, 'YYYYMMDD')
+            GROUP BY ds
+        ),
+        daily_volume AS (
+            SELECT 
+                ds,
+                SUM(deal_amount) AS total_daily_volume -- Ensure this matches your trade table's volume column
+            FROM public.dws_all_trades_di
+            WHERE ds >= TO_CHAR(TO_DATE('{latest_ds}', 'YYYYMMDD') - 30, 'YYYYMMDD')
+            GROUP BY ds
+        )
+        SELECT 
+            t.ds AS report_date,
+            t.active_traders_7d,
+            t.active_traders_30d,
+            COALESCE(v.total_daily_volume, 0) AS total_daily_volume
+        FROM daily_traders t
+        LEFT JOIN daily_volume v ON t.ds = v.ds
+        ORDER BY t.ds DESC;
+        """
+    },
+    {
+        "question": "Identify the number of high-risk users who have used VPN, proxy, or emulator detected flags in the last 7 days and show their country distribution?",
+        "sql": """
+        SELECT 
+            u.country, 
+            COUNT(DISTINCT u.user_code) AS high_risk_users 
+        FROM public.user_profile_360 u 
+        JOIN public.dwd_user_device_log_di d 
+            ON u.user_code::TEXT = d.user_code::TEXT 
+            AND d.ds >= '{start_7d}'
+        WHERE u.ds = '{latest_ds}' 
+            AND u.max_risk_score > 0.8
+            AND (d.is_vpn = 1 OR d.is_proxy = 1 OR d.is_emulator = 1) 
+        GROUP BY u.country 
+        ORDER BY high_risk_users DESC;
         """
     }
     
