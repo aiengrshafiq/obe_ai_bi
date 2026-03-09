@@ -94,6 +94,11 @@ class UserRegister(BaseModel):
     username: str
     password: str
 
+class ExploreRequest(BaseModel):
+    log_id: int
+    dimension: str
+
+
 def generate_id():
     return int(time.time() * 1000)
 
@@ -232,3 +237,12 @@ async def qa_tribunal_page(request: Request, current_user: User = Depends(get_cu
         "request": request, 
         "user": current_user
     })
+
+@router.post("/api/explore/transform")
+async def explore_transform(req: ExploreRequest, current_user=Depends(get_current_user)):
+    """
+    Enterprise Semantic Layer: Slices an existing query by a new dimension deterministically.
+    """
+    orchestrator = Orchestrator(user=current_user.username)
+    result = await orchestrator.explore_slice(req.log_id, req.dimension)
+    return result

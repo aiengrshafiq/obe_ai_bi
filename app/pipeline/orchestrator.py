@@ -7,6 +7,7 @@ import traceback
 import asyncio
 from datetime import datetime
 from typing import Dict, Any, List
+import sqlglot
 
 # Import Agents & Infrastructure
 from app.pipeline.agents.intent import IntentAgent
@@ -211,6 +212,96 @@ class Orchestrator:
             # ⚠️ FIX 1: This is now guaranteed to run, closing the DB session no matter what crashes
             self.db.close()
 
+
+    async def explore_slice(self, log_id: int, dimension: str) -> Dict[str, Any]:
+        """
+        Phase 2: Deterministic AST SQL Transformation with Progressive Drill-Down.
+        """
+        start_time = time.time()
+        
+        try:
+            # 1. Retrieve the exact historical state
+            log_entry = self.db.query(ChatLog).filter(ChatLog.id == log_id).first()
+            if not log_entry or not log_entry.generated_sql:
+                return self._json_safe({"type": "error", "message": "Original query not found."})
+
+            base_sql = log_entry.generated_sql
+            
+            # 2. AST Parsing & Transformation
+            try:
+                ast = sqlglot.parse_one(base_sql, read="postgres")
+                existing_cols = [e.alias_or_name.lower() for e in ast.selects]
+                
+                if dimension.lower() not in existing_cols:
+                    # Safely append to SELECT and GROUP BY using AST
+                    ast = ast.select(dimension, append=True).group_by(dimension, append=True)
+                    new_sql = ast.sql(dialect="postgres")
+                else:
+                    new_sql = base_sql 
+                    
+            except Exception as e:
+                print(f"AST Parsing Error: {e}")
+                return self._json_safe({"type": "error", "message": "Cannot safely slice this specific query format."})
+
+            # 3. Save the new state to ChatLog for future drill-downs!
+            new_log = ChatLog(
+                username=self.user, 
+                user_question=f"Sliced by {dimension}", 
+                generated_sql=new_sql,
+                tables_used=log_entry.tables_used,
+                execution_success=True
+            )
+            self.db.add(new_log)
+            self.db.commit() # Generates new_log.id
+
+            # 4. Execute the new deterministic SQL
+            df = await vn.run_sql_async(new_sql)
+            
+            if df is None or df.empty:
+                return self._json_safe({"type": "success", "sql": new_sql, "message": "No data found for this slice.", "data": []})
+
+            # 5. Format & Visualize
+            df = self._sanitize_dataframe(df)
+            dummy_msg = f"Show data broken down by {dimension}"
+            intent_result = await IntentAgent.classify(dummy_msg)
+            
+            viz_result = await VisualizationAgent.determine_format(df, new_sql, dummy_msg, intent_result)
+            visual_type = viz_result.get("visual_type", "table")
+            
+            df_safe = df.where(pd.notnull(df), None)
+            safe_data = df_safe.head(5000 if visual_type == "plotly" else 100).to_dict(orient='records')
+
+            result = {
+                "type": "success",
+                "sql": new_sql,
+                "data": safe_data,
+                "visual_type": visual_type,
+                "plotly_code": viz_result.get("plotly_code"),
+                "thought": f"AST Deterministic Slicing: Injected '{dimension}' into base query."
+            }
+            
+            # 6. Filter used dimensions and return the rest for continuous exploration
+            explore_meta = self._get_explore_metadata(new_log.tables_used)
+            available_dims = [
+                d for d in explore_meta["dimensions"] 
+                if d["key"].lower() not in existing_cols and d["key"].lower() != dimension.lower()
+            ]
+            
+            if available_dims:
+                result["explore"] = {
+                    "log_id": new_log.id, # Pass the NEW log ID back to the UI
+                    "dimensions": available_dims
+                }
+
+            return self._json_safe(result)
+
+        except Exception as e:
+            traceback.print_exc()
+            return self._json_safe({"type": "error", "message": f"Explore failed: {str(e)}"})
+        finally:
+            self.db.close()
+
+            
     # --- HELPERS ---
     def _build_prompt(self, msg, history, intent, date_ctx):
         return get_sql_system_prompt(
@@ -236,11 +327,111 @@ class Orchestrator:
         except: pass
         return df
 
+    def _get_explore_metadata(self, tables_string: str) -> dict:
+        """Fetches safe dimensions for the UI based on the tables queried."""
+        if not tables_string:
+            return {"dimensions": []}
+
+        tables = [t.strip() for t in tables_string.split(",")]
+        all_dims = set()
+
+        # Schema-Verified Dictionary of Safe Dimensions
+        cube_metadata = {
+            "user_profile_360": [
+                {"key": "country", "label": "Country"},
+                {"key": "user_segment", "label": "User Segment"},
+                {"key": "kyc_status_desc", "label": "KYC Status"},
+                {"key": "lifecycle_stage", "label": "Lifecycle Stage"},
+                {"key": "trading_profile", "label": "Trading Profile"}
+            ],
+            "dws_user_deposit_withdraw_detail_di": [
+                {"key": "type", "label": "Transaction Type"},
+                {"key": "coin", "label": "Coin/Token"},
+                {"key": "chain", "label": "Network Chain"},
+                {"key": "audit_status_desc", "label": "Audit Status"}
+            ],
+            "dws_all_trades_di": [
+                {"key": "market_type", "label": "Market (Spot/Futures)"},
+                {"key": "order_side_desc", "label": "Order Side (Buy/Sell)"},
+                {"key": "margin_mode_desc", "label": "Margin Mode"},
+                {"key": "alias", "label": "Trading Pair"}
+            ],
+            "risk_campaign_blacklist": [
+                {"key": "reason", "label": "Ban Reason"},
+                {"key": "owner", "label": "Blocked By"}
+            ],
+            "ads_total_root_referral_volume_di": [
+                {"key": "root_country", "label": "Partner Country"},
+                {"key": "root_user_type", "label": "Partner Type"}
+            ],
+            "ads_total_root_referral_volume_df": [
+                {"key": "root_country", "label": "Partner Country"},
+                {"key": "root_user_type", "label": "Partner Type"}
+            ],
+            "dwd_activity_t_points_user_task_di": [
+                {"key": "rule_code", "label": "Activity Type"},
+                {"key": "state", "label": "Completion State"}
+            ],
+            "dwd_user_device_log_di": [
+                {"key": "operation", "label": "Operation Type"},
+                {"key": "os_name", "label": "Operating System"},
+                {"key": "browser_name", "label": "Browser"},
+                {"key": "country", "label": "Device Country"}
+            ],
+            "dwd_login_history_log_di": [
+                {"key": "type", "label": "Event Type"},
+                {"key": "business", "label": "Business Unit"},
+                {"key": "os", "label": "Operating System"},
+                {"key": "language", "label": "Browser Language"}
+            ]
+        }
+
+        # Combine dimensions from ALL tables used in the query
+        for t in tables:
+            if t in cube_metadata:
+                for dim in cube_metadata[t]:
+                    # Using tuple of dict items to ensure uniqueness in the set across JOINs
+                    all_dims.add(tuple(dim.items()))
+
+        # Convert back to list of dicts for JSON
+        unique_dims = [dict(t) for t in all_dims]
+        
+        # Sort alphabetically by label for nice UI presentation
+        unique_dims.sort(key=lambda x: x["label"])
+
+        return {"dimensions": unique_dims}
+
+
+    # def _finalize(self, log_entry, status_type, **kwargs):
+    #     if status_type == "success": log_entry.execution_success = True
+    #     elif status_type == "error": log_entry.error_message = kwargs.get("message", "Unknown Error")
+    #     self.db.commit()
+    #     return {"type": status_type, **kwargs}
+
     def _finalize(self, log_entry, status_type, **kwargs):
-        if status_type == "success": log_entry.execution_success = True
-        elif status_type == "error": log_entry.error_message = kwargs.get("message", "Unknown Error")
-        self.db.commit()
-        return {"type": status_type, **kwargs}
+        if status_type == "success": 
+            log_entry.execution_success = True
+        elif status_type == "error": 
+            log_entry.error_message = kwargs.get("message", "Unknown Error")
+            
+        # Commit generates the log_entry.id
+        self.db.commit() 
+        
+        result = {"type": status_type, **kwargs}
+        
+        # --- NEW: Phase 1 Explore Payload Injection ---
+        if status_type == "success" and log_entry.tables_used:
+            explore_meta = self._get_explore_metadata(log_entry.tables_used)
+            
+            # Only append explore if we actually found valid dimensions
+            if explore_meta["dimensions"]:
+                result["explore"] = {
+                    "log_id": log_entry.id,
+                    "dimensions": explore_meta["dimensions"]
+                }
+        # ----------------------------------------------
+        
+        return result
 
     def _finalize_safe(self, log_entry, status_type, **kwargs):
         return self._json_safe(self._finalize(log_entry, status_type, **kwargs))
