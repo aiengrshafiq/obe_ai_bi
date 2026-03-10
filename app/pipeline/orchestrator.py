@@ -477,38 +477,7 @@ class Orchestrator:
         }
 
 
-    # def _finalize(self, log_entry, status_type, **kwargs):
-    #     if status_type == "success": log_entry.execution_success = True
-    #     elif status_type == "error": log_entry.error_message = kwargs.get("message", "Unknown Error")
-    #     self.db.commit()
-    #     return {"type": status_type, **kwargs}
-
-    # def _finalize(self, log_entry, status_type, **kwargs):
-    #     if status_type == "success": 
-    #         log_entry.execution_success = True
-    #     elif status_type == "error": 
-    #         log_entry.error_message = kwargs.get("message", "Unknown Error")
-            
-    #     # Commit generates the log_entry.id
-    #     self.db.commit() 
-        
-    #     result = {"type": status_type, **kwargs}
-        
-    #     # --- NEW: Phase 1 Explore Payload Injection ---
-    #     if status_type == "success" and log_entry.tables_used:
-    #        # explore_meta = self._get_explore_metadata(log_entry.tables_used)
-    #         explore_meta = self._get_explore_metadata(log_entry.tables_used, final_sql)
-            
-    #         # Only append explore if we actually found valid dimensions
-    #         if explore_meta["dimensions"]:
-    #             result["explore"] = {
-    #                 "log_id": log_entry.id,
-    #                 "dimensions": explore_meta["dimensions"],
-    #                 "measures": explore_meta["measures"]
-    #             }
-    #     # ----------------------------------------------
-        
-    #     return result
+    
 
     def _finalize(self, log_entry, status_type, **kwargs):
         if status_type == "success": 
