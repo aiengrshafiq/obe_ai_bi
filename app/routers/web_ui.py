@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy import desc
+from typing import Optional
 
 # Internal imports
 from app.services.vanna_wrapper import vn
@@ -96,7 +97,9 @@ class UserRegister(BaseModel):
 
 class ExploreRequest(BaseModel):
     log_id: int
-    dimension: str
+    action_type: str  # 'dimension' or 'measure'
+    key: str
+    agg: Optional[str] = None # e.g., 'SUM', 'COUNT'
 
 
 def generate_id():
@@ -241,8 +244,8 @@ async def qa_tribunal_page(request: Request, current_user: User = Depends(get_cu
 @router.post("/api/explore/transform")
 async def explore_transform(req: ExploreRequest, current_user=Depends(get_current_user)):
     """
-    Enterprise Semantic Layer: Slices an existing query by a new dimension deterministically.
+    Enterprise Semantic Layer: Slices or Swaps Metrics deterministically via AST.
     """
     orchestrator = Orchestrator(user=current_user.username)
-    result = await orchestrator.explore_slice(req.log_id, req.dimension)
+    result = await orchestrator.explore_action(req.log_id, req.action_type, req.key, req.agg)
     return result

@@ -213,10 +213,12 @@ class Orchestrator:
             self.db.close()
 
 
-    async def explore_slice(self, log_id: int, dimension: str) -> Dict[str, Any]:
+    async def explore_action(self, log_id: int, action_type: str, key: str, agg: str = None) -> Dict[str, Any]:
         """
-        Phase 2: Deterministic AST SQL Transformation with Progressive Drill-Down.
+        Phase 2: Deterministic AST SQL Transformation.
+        Handles both Progressive Drill-Down (Dimensions) and Metric Swapping (Measures).
         """
+        import sqlglot.expressions as exp
         start_time = time.time()
         
         try:
@@ -230,23 +232,50 @@ class Orchestrator:
             # 2. AST Parsing & Transformation
             try:
                 ast = sqlglot.parse_one(base_sql, read="postgres")
-                existing_cols = [e.alias_or_name.lower() for e in ast.selects]
                 
-                if dimension.lower() not in existing_cols:
-                    # Safely append to SELECT and GROUP BY using AST
-                    ast = ast.select(dimension, append=True).group_by(dimension, append=True)
-                    new_sql = ast.sql(dialect="postgres")
+                if action_type == "dimension":
+                    existing_cols = [e.alias_or_name.lower() for e in ast.selects]
+                    
+                    if key.lower() not in existing_cols:
+                        # Safely append to SELECT and GROUP BY
+                        ast = ast.select(key, append=True).group_by(key, append=True)
+                        new_sql = ast.sql(dialect="postgres")
+                    else:
+                        new_sql = base_sql 
+
+                elif action_type == "measure" and agg:
+                    replaced = False
+                    new_alias = f"{key}_metric"
+                    
+                    # A. Find the FIRST aggregated column in the SELECT clause and replace it
+                    for i, expr in enumerate(ast.expressions):
+                        if expr.find(exp.AggFunc):
+                            new_expr = sqlglot.parse_one(f"{agg}({key}) AS {new_alias}")
+                            ast.expressions[i] = new_expr
+                            replaced = True
+                            break # Only replace the primary metric
+                    
+                    if replaced:
+                        # B. Overwrite the ORDER BY clause to sort by the NEW metric
+                        ast.args.pop("order", None) # Remove existing order by safely
+                        ast = ast.order_by(f"{new_alias} DESC")
+                        new_sql = ast.sql(dialect="postgres")
+                    else:
+                        # Fallback if no aggregate was found (e.g., raw list)
+                        new_sql = base_sql
+
                 else:
-                    new_sql = base_sql 
+                    return self._json_safe({"type": "error", "message": "Invalid explore action."})
                     
             except Exception as e:
                 print(f"AST Parsing Error: {e}")
-                return self._json_safe({"type": "error", "message": "Cannot safely slice this specific query format."})
+                return self._json_safe({"type": "error", "message": "Cannot safely transform this specific query format."})
 
             # 3. Save the new state to ChatLog for future drill-downs!
+            action_text = f"Sliced by {key}" if action_type == "dimension" else f"Swapped metric to {key}"
             new_log = ChatLog(
                 username=self.user, 
-                user_question=f"Sliced by {dimension}", 
+                user_question=action_text, 
                 generated_sql=new_sql,
                 tables_used=log_entry.tables_used,
                 execution_success=True
@@ -258,11 +287,11 @@ class Orchestrator:
             df = await vn.run_sql_async(new_sql)
             
             if df is None or df.empty:
-                return self._json_safe({"type": "success", "sql": new_sql, "message": "No data found for this slice.", "data": []})
+                return self._json_safe({"type": "success", "sql": new_sql, "message": "No data found for this view.", "data": []})
 
             # 5. Format & Visualize
             df = self._sanitize_dataframe(df)
-            dummy_msg = f"Show data broken down by {dimension}"
+            dummy_msg = f"Show data broken down by {key}" if action_type == "dimension" else f"Show {key}"
             intent_result = await IntentAgent.classify(dummy_msg)
             
             viz_result = await VisualizationAgent.determine_format(df, new_sql, dummy_msg, intent_result)
@@ -277,20 +306,24 @@ class Orchestrator:
                 "data": safe_data,
                 "visual_type": visual_type,
                 "plotly_code": viz_result.get("plotly_code"),
-                "thought": f"AST Deterministic Slicing: Injected '{dimension}' into base query."
+                "thought": f"AST Deterministic Transformation: {action_text}."
             }
             
-            # 6. Filter used dimensions and return the rest for continuous exploration
+            # 6. Return remaining dimensions and all other safe measures
             explore_meta = self._get_explore_metadata(new_log.tables_used)
-            available_dims = [
-                d for d in explore_meta["dimensions"] 
-                if d["key"].lower() not in existing_cols and d["key"].lower() != dimension.lower()
-            ]
             
-            if available_dims:
+            current_ast = sqlglot.parse_one(new_sql, read="postgres")
+            current_cols = [e.alias_or_name.lower() for e in current_ast.selects]
+            
+            available_dims = [d for d in explore_meta["dimensions"] if d["key"].lower() not in current_cols]
+            # Exclude the metric we just swapped to
+            available_measures = [m for m in explore_meta.get("measures", []) if m["key"].lower() != key.lower()]
+            
+            if available_dims or available_measures:
                 result["explore"] = {
-                    "log_id": new_log.id, # Pass the NEW log ID back to the UI
-                    "dimensions": available_dims
+                    "log_id": new_log.id,
+                    "dimensions": available_dims,
+                    "measures": available_measures
                 }
 
             return self._json_safe(result)
@@ -328,15 +361,16 @@ class Orchestrator:
         return df
 
     def _get_explore_metadata(self, tables_string: str) -> dict:
-        """Fetches safe dimensions for the UI based on the tables queried."""
+        """Fetches safe dimensions and measures for the UI based on the tables queried."""
         if not tables_string:
-            return {"dimensions": []}
+            return {"dimensions": [], "measures": []}
 
         tables = [t.strip() for t in tables_string.split(",")]
         all_dims = set()
+        all_measures = set()
 
         # Schema-Verified Dictionary of Safe Dimensions
-        cube_metadata = {
+        cube_dims = {
             "user_profile_360": [
                 {"key": "country", "label": "Country"},
                 {"key": "user_segment", "label": "User Segment"},
@@ -381,25 +415,66 @@ class Orchestrator:
             "dwd_login_history_log_di": [
                 {"key": "type", "label": "Event Type"},
                 {"key": "business", "label": "Business Unit"},
-                {"key": "os", "label": "Operating System"},
-                {"key": "language", "label": "Browser Language"}
+                {"key": "os", "label": "Operating System"}
             ]
         }
 
-        # Combine dimensions from ALL tables used in the query
+        # NEW: Schema-Verified Dictionary of Safe Measures (Metrics)
+        # Includes the required 'agg' function so the AST knows how to compile it.
+        cube_measures = {
+            "user_profile_360": [
+                {"key": "user_code", "label": "Total Users", "agg": "COUNT"},
+                {"key": "total_trade_volume", "label": "Lifetime Trade Volume", "agg": "SUM"},
+                {"key": "total_deposit_volume", "label": "Lifetime Deposit Volume", "agg": "SUM"},
+                {"key": "total_net_fees", "label": "Lifetime Net Fees", "agg": "SUM"},
+                {"key": "total_available_balance", "label": "Total Available Balance", "agg": "SUM"}
+            ],
+            "dws_user_deposit_withdraw_detail_di": [
+                {"key": "user_code", "label": "Unique Users", "agg": "COUNT(DISTINCT)"},
+                {"key": "real_amount", "label": "Total Amount", "agg": "SUM"},
+                {"key": "fee_amount", "label": "Total Fees", "agg": "SUM"}
+            ],
+            "dws_all_trades_di": [
+                {"key": "user_code", "label": "Unique Traders", "agg": "COUNT(DISTINCT)"},
+                {"key": "deal_amount", "label": "Trading Volume", "agg": "SUM"},
+                {"key": "net_fee", "label": "Trading Fees", "agg": "SUM"},
+                {"key": "order_id", "label": "Trade Count", "agg": "COUNT"}
+            ],
+            "ads_total_root_referral_volume_di": [
+                {"key": "daily_referrals", "label": "New Referrals", "agg": "SUM"},
+                {"key": "daily_referral_volume", "label": "Referral Volume", "agg": "SUM"},
+                {"key": "daily_deposit_amount", "label": "Referral Deposits", "agg": "SUM"},
+                {"key": "daily_referral_pnl", "label": "Referral PnL", "agg": "SUM"}
+            ],
+            "ads_total_root_referral_volume_df": [
+                {"key": "total_referrals", "label": "Lifetime Referrals", "agg": "SUM"},
+                {"key": "total_referral_volume", "label": "Lifetime Referral Volume", "agg": "SUM"}
+            ],
+            "dwd_activity_t_points_user_task_di": [
+                {"key": "user_code", "label": "Unique Users", "agg": "COUNT(DISTINCT)"},
+                {"key": "earned_points", "label": "Total Points Earned", "agg": "SUM"}
+            ]
+            # Device/Login logs typically only use COUNT(user_code) which is standard, 
+            # so we omit explicit numeric measures to prevent math errors.
+        }
+
+        # Combine dimensions and measures from ALL tables used in the query
         for t in tables:
-            if t in cube_metadata:
-                for dim in cube_metadata[t]:
-                    # Using tuple of dict items to ensure uniqueness in the set across JOINs
+            if t in cube_dims:
+                for dim in cube_dims[t]:
                     all_dims.add(tuple(dim.items()))
+            if t in cube_measures:
+                for meas in cube_measures[t]:
+                    all_measures.add(tuple(meas.items()))
 
-        # Convert back to list of dicts for JSON
-        unique_dims = [dict(t) for t in all_dims]
-        
-        # Sort alphabetically by label for nice UI presentation
-        unique_dims.sort(key=lambda x: x["label"])
+        # Convert back to list of dicts for JSON & Sort alphabetically
+        unique_dims = sorted([dict(t) for t in all_dims], key=lambda x: x["label"])
+        unique_measures = sorted([dict(t) for t in all_measures], key=lambda x: x["label"])
 
-        return {"dimensions": unique_dims}
+        return {
+            "dimensions": unique_dims,
+            "measures": unique_measures
+        }
 
 
     # def _finalize(self, log_entry, status_type, **kwargs):
@@ -427,7 +502,8 @@ class Orchestrator:
             if explore_meta["dimensions"]:
                 result["explore"] = {
                     "log_id": log_entry.id,
-                    "dimensions": explore_meta["dimensions"]
+                    "dimensions": explore_meta["dimensions"],
+                    "measures": explore_meta["measures"]
                 }
         # ----------------------------------------------
         
