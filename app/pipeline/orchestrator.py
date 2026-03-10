@@ -488,7 +488,8 @@ class Orchestrator:
         # Commit generates the log_entry.id
         self.db.commit() 
         
-        result = {"type": status_type, **kwargs}
+        #result = {"type": status_type, **kwargs}
+        result = {"type": status_type, "log_id": log_entry.id, **kwargs}
         
         # --- Phase 1 & 2 & 3 Explore Payload Injection ---
         if status_type == "success" and log_entry.tables_used:

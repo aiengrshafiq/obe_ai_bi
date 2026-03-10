@@ -291,8 +291,23 @@
                 content += `<div class="text-slate-500 italic p-4 bg-gray-50 rounded-lg text-center text-sm border border-dashed border-gray-200">No data found matching your query.</div>`;
             }
 
+            // if (data.data && data.data.length > 0) {
+            //     content += `<div class="mt-3 flex gap-2 justify-end"><button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Download CSV</button></div>`;
+            // }
             if (data.data && data.data.length > 0) {
-                content += `<div class="mt-3 flex gap-2 justify-end"><button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Download CSV</button></div>`;
+                // Use data.log_id from the top level, fallback to explore.log_id just in case
+                const pinLogId = data.log_id || (data.explore ? data.explore.log_id : null);
+                
+                content += `
+                <div class="mt-4 flex gap-2 justify-end pt-3 border-t border-slate-50">
+                    <button onclick="pinChart(${pinLogId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-indigo-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-indigo-300 font-medium">
+                        📌 Pin to Dashboard
+                    </button>
+                    <button onclick="exportCSV(${resultId})" class="text-xs flex items-center gap-1.5 text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:shadow-sm transition-all hover:border-blue-200 font-medium">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 
+                        Download CSV
+                    </button>
+                </div>`;
             }
 
             
@@ -470,6 +485,39 @@
             btnElement.disabled = false;
             btnElement.innerHTML = originalHtml;
             btnElement.classList.remove("opacity-75", "cursor-not-allowed");
+        }
+    }
+    async function pinChart(logId) {
+        if (!logId) {
+            alert("Error: Cannot pin this chart (Missing ID).");
+            return;
+        }
+        
+        const title = prompt("Enter a name for this dashboard tile:", "My New Chart");
+        if (!title) return; // User cancelled
+        
+        try {
+            const res = await fetch('/api/dashboard/pin', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json', 
+                    'Authorization': 'Bearer ' + localStorage.getItem('access_token') 
+                },
+                body: JSON.stringify({ log_id: logId, title: title })
+            });
+            
+            const data = await res.json();
+            if (res.ok) {
+                if (data.status === "already_pinned") {
+                    alert("This chart is already on your dashboard!");
+                } else {
+                    alert("✅ Pinned successfully! Check your Dashboard.");
+                }
+            } else {
+                alert("Error: " + data.detail);
+            }
+        } catch (e) {
+            alert("Failed to pin chart. Check your connection.");
         }
     }
 </script>

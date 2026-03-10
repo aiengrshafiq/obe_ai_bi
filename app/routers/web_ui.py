@@ -16,7 +16,7 @@ from typing import Optional
 from app.services.vanna_wrapper import vn
 from app.db.safe_sql_runner import SafeSQLRunner 
 from app.services.date_resolver import DateResolver
-from app.db.app_models import SessionLocal, ChatLog, User
+from app.db.app_models import SessionLocal, ChatLog, User, PinnedChart
 from app.services.auth import verify_token, get_password_hash, verify_password, create_access_token 
 
 # Pipeline Imports
@@ -249,3 +249,112 @@ async def explore_transform(req: ExploreRequest, current_user=Depends(get_curren
     orchestrator = Orchestrator(user=current_user.username)
     result = await orchestrator.explore_action(req.log_id, req.action_type, req.key, req.agg)
     return result
+
+
+# --- OPTION B: DASHBOARD ENDPOINTS ---
+
+class PinRequest(BaseModel):
+    log_id: int
+    title: str
+
+@router.post("/api/dashboard/pin")
+async def pin_chart_to_dashboard(req: PinRequest, db = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Pins a specific chart to the user's dashboard."""
+    # 1. Verify the log exists
+    log = db.query(ChatLog).filter(ChatLog.id == req.log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Chart not found")
+        
+    # 2. Prevent duplicate pins for the same user
+    existing = db.query(PinnedChart).filter(
+        PinnedChart.username == current_user.username, 
+        PinnedChart.log_id == req.log_id
+    ).first()
+    
+    if existing:
+        return {"status": "already_pinned", "message": "Chart is already on your dashboard."}
+        
+    # 3. Save the Pin
+    new_pin = PinnedChart(
+        username=current_user.username, 
+        log_id=req.log_id, 
+        title=req.title
+    )
+    db.add(new_pin)
+    db.commit()
+    
+    return {"status": "success", "message": "Pinned to dashboard!"}
+
+@router.delete("/api/dashboard/unpin/{pin_id}")
+async def unpin_chart(pin_id: int, db = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Removes a chart from the user's dashboard."""
+    pin = db.query(PinnedChart).filter(
+        PinnedChart.id == pin_id, 
+        PinnedChart.username == current_user.username
+    ).first()
+    
+    if not pin:
+        raise HTTPException(status_code=404, detail="Pin not found or unauthorized")
+        
+    db.delete(pin)
+    db.commit()
+    return {"status": "success", "message": "Chart removed."}
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request, current_user: User = Depends(get_current_user)):
+    """Renders the empty Dashboard shell."""
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": current_user})
+
+@router.get("/api/dashboard/list")
+async def get_dashboard_list(db = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Returns the metadata of all pinned charts for the logged-in user."""
+    pins = db.query(PinnedChart).filter(PinnedChart.username == current_user.username).order_by(PinnedChart.created_at.desc()).all()
+    
+    return [{
+        "pin_id": pin.id,
+        "log_id": pin.log_id,
+        "title": pin.title
+    } for pin in pins]
+
+@router.get("/api/dashboard/refresh/{log_id}")
+async def refresh_dashboard_chart(log_id: int, db = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Re-runs the SQL for a pinned chart to get live data."""
+    # 1. Security: Ensure the user actually pinned this chart
+    pin = db.query(PinnedChart).filter(
+        PinnedChart.username == current_user.username, 
+        PinnedChart.log_id == log_id
+    ).first()
+    
+    if not pin:
+        raise HTTPException(status_code=403, detail="Unauthorized chart access")
+        
+    # 2. Fetch the deterministically saved SQL
+    log = db.query(ChatLog).filter(ChatLog.id == log_id).first()
+    if not log or not log.generated_sql:
+        raise HTTPException(status_code=404, detail="Original SQL not found")
+        
+    # 3. Execute live data
+    df = await vn.run_sql_async(log.generated_sql)
+    
+    if df is None or df.empty:
+        return {"type": "success", "visual_type": "text", "message": "No data available."}
+        
+    # 4. Format for UI
+    import numpy as np
+    try: df.replace([np.inf, -np.inf], np.nan, inplace=True) 
+    except: pass
+    
+    from app.pipeline.agents.visualization import VisualizationAgent
+    # Auto-detect the best chart format for the live data
+    viz_result = await VisualizationAgent.determine_format(df, log.generated_sql, "Dashboard Refresh")
+    visual_type = viz_result.get("visual_type", "table")
+    
+    df_safe = df.where(pd.notnull(df), None)
+    safe_data = df_safe.head(5000 if visual_type == "plotly" else 100).to_dict(orient='records')
+    
+    return {
+        "type": "success",
+        "visual_type": visual_type,
+        "plotly_code": viz_result.get("plotly_code"),
+        "data": safe_data
+    }

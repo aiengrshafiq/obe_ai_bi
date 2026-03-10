@@ -1,0 +1,152 @@
+{% extends "layout_app.html" %}
+
+{% block page_content %}
+<div class="min-h-screen bg-slate-50 p-6 md:p-10">
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-8 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900 tracking-tight">My Dashboard</h1>
+                <p class="text-slate-500 text-sm mt-1">Live, self-updating metrics.</p>
+            </div>
+            <a href="/" class="text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-lg transition-colors">
+                + Ask AI for New Chart
+            </a>
+        </header>
+
+        <div id="dashboard-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            </div>
+        
+        <div id="empty-state" class="hidden text-center py-20">
+            <div class="text-5xl mb-4">📌</div>
+            <h3 class="text-lg font-medium text-slate-700">Your dashboard is empty</h3>
+            <p class="text-slate-500 mt-2">Go to the AI Chat, ask a question, and click "Pin to Dashboard" to add charts here.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script>
+    // --- SECURITY CHECK ---
+    if (!localStorage.getItem('access_token')) { window.location.href = "/login"; }
+
+    async function loadDashboard() {
+        try {
+            // 1. Fetch the list of pinned charts
+            const res = await fetch('/api/dashboard/list', {
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+            });
+            const pins = await res.json();
+            
+            const grid = document.getElementById('dashboard-grid');
+            const emptyState = document.getElementById('empty-state');
+            
+            if (pins.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            // 2. Render Loading Cards
+            pins.forEach(pin => {
+                const card = document.createElement('div');
+                card.className = "bg-white border border-slate-200 rounded-2xl shadow-sm p-5 flex flex-col h-[450px] relative group";
+                card.id = `card-${pin.pin_id}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-slate-800 truncate pr-4" title="${pin.title}">${pin.title}</h3>
+                        <button onclick="unpinChart(${pin.pin_id})" class="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100" title="Remove from Dashboard">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                    <div id="content-${pin.pin_id}" class="flex-1 flex flex-col items-center justify-center text-slate-400">
+                        <svg class="animate-spin h-8 w-8 text-blue-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        <span class="text-xs font-medium uppercase tracking-widest animate-pulse">Running live query...</span>
+                    </div>
+                `;
+                grid.appendChild(card);
+                
+                // 3. Fetch Live Data asynchronously for each card
+                fetchLiveData(pin.pin_id, pin.log_id);
+            });
+            
+        } catch (e) {
+            console.error("Dashboard failed to load:", e);
+        }
+    }
+
+    async function fetchLiveData(pinId, logId) {
+        try {
+            const res = await fetch(`/api/dashboard/refresh/${logId}`, {
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+            });
+            const data = await res.json();
+            
+            const container = document.getElementById(`content-${pinId}`);
+            container.classList.remove('items-center', 'justify-center');
+            container.innerHTML = ''; // Clear loader
+            
+            if (data.type === 'error') {
+                container.innerHTML = `<div class="text-red-500 text-sm bg-red-50 p-3 rounded-lg border border-red-100">${data.message}</div>`;
+                return;
+            }
+
+            // Render Plotly or Table
+            if (data.visual_type === 'plotly' && data.plotly_code) {
+                const chartId = `viz-${pinId}`;
+                container.innerHTML = `<div id="${chartId}" class="w-full h-full"></div>`;
+                // Make layout fit the card tightly
+                const layout = data.plotly_code.layout;
+                layout.margin = { l: 40, r: 20, t: 20, b: 40 };
+                Plotly.newPlot(chartId, data.plotly_code.data, layout, {responsive: true, displayModeBar: false});
+            } else if (data.data && data.data.length > 0) {
+                container.innerHTML = `<div class="overflow-y-auto w-full h-full no-scrollbar">${generateSimpleTable(data.data)}</div>`;
+            } else {
+                container.innerHTML = `<div class="text-slate-400 text-sm text-center italic mt-10">No data found.</div>`;
+            }
+            
+        } catch (e) {
+            document.getElementById(`content-${pinId}`).innerHTML = `<div class="text-red-500 text-sm">Failed to load data.</div>`;
+        }
+    }
+
+    async function unpinChart(pinId) {
+        if(!confirm("Remove this chart from your dashboard?")) return;
+        
+        try {
+            await fetch(`/api/dashboard/unpin/${pinId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + localStorage.getItem('access_token') }
+            });
+            const card = document.getElementById(`card-${pinId}`);
+            card.style.opacity = '0';
+            setTimeout(() => { card.remove(); }, 300);
+            
+            // Show empty state if that was the last one
+            if (document.querySelectorAll('[id^="card-"]').length <= 1) {
+                setTimeout(() => { document.getElementById('empty-state').classList.remove('hidden'); }, 350);
+            }
+        } catch (e) {
+            alert("Failed to remove pin.");
+        }
+    }
+
+    function generateSimpleTable(data) {
+        if (!data || data.length === 0) return '';
+        const headers = Object.keys(data[0]);
+        let rows = '';
+        data.slice(0, 15).forEach((row, idx) => {
+            const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+            const cells = Object.values(row).map(v => {
+                let displayVal = typeof v === 'number' ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(v) : v;
+                return `<td class="px-3 py-2 whitespace-nowrap text-slate-600 font-mono text-xs border-b border-slate-100">${displayVal || ''}</td>`;
+            }).join('');
+            rows += `<tr class="${bgClass}">${cells}</tr>`;
+        });
+        return `<table class="min-w-full text-left relative border-collapse"><thead class="bg-slate-50 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm"><tr>${headers.map(h => `<th class="px-3 py-2 border-b border-slate-200 bg-slate-50">${h}</th>`).join('')}</tr></thead><tbody class="divide-y divide-slate-100">${rows}</tbody></table>`;
+    }
+
+    // Auto-load on page start
+    document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+{% endblock %}

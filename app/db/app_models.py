@@ -60,5 +60,15 @@ class ChatLog(Base):
     correction_attempts = Column(Integer, default=0)
     tables_used = Column(Text, nullable=True)
 
+class PinnedChart(Base):
+    __tablename__ = "pinned_charts"
+    __table_args__ = {"schema": "ai_pilot"}
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    username = Column(String, index=True) # Ties the pin to the logged-in user
+    log_id = Column(Integer) # Ties the pin to the exact SQL query
+    title = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Note: We purposely skip 'Base.metadata.create_all' to avoid permission issues.
 # Tables should be managed via DDL scripts in Alibaba Cloud.
