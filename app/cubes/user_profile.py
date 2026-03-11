@@ -116,6 +116,12 @@ This table is a DAILY SNAPSHOT. Each row represents a user's state on a specific
 - **FTD (First Time Depositors)**: Count of users where `DATE(first_deposit_date)` equals the target date.
 - **KYC Status**: Always group by `kyc_status_desc` (e.g., 'Basic'), never by numeric codes.
 
+**KPI Definitions (CRITICAL for DAU / WAU / MAU):**
+If the user asks for DAU, WAU, or MAU, you MUST calculate them together in a single query using these exact flags:
+- DAU: `COUNT(CASE WHEN days_since_last_login = 0 THEN 1 END) AS DAU`
+- WAU: `COUNT(CASE WHEN is_active_user_7d = 1 THEN 1 END) AS WAU`
+- MAU: `COUNT(CASE WHEN is_active_user_30d = 1 THEN 1 END) AS MAU`
+
 **Segments (Exact Spelling):**
 - `user_segment`: 'VIP', 'High Value', 'Medium Value', 'Low Value', 'Depositor Only'
 
